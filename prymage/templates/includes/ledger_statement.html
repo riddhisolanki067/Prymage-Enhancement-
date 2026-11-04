@@ -1,0 +1,125 @@
+{#
+  Shared body for the three ledger statement print formats (requirement D).
+
+  D1 Customer, D2 Supplier and D3 Account are the same statement with a
+  different heading and party label, so the layout lives here once. D4 - the
+  letterhead and logo of the company the statement belongs to - comes from
+  `add_header`, which renders `doc.letter_head`; the Ledger Statement defaults
+  that field from Company.default_letter_head.
+#}
+{%- macro money(value) -%}
+{{ frappe.utils.fmt_money(value or 0) }}
+{%- endmacro -%}
+
+{%- macro statement(doc, heading, party_label, letter_head, no_letterhead, print_settings) -%}
+{%- from "templates/print_formats/standard_macros.html" import add_header -%}
+
+<div class="page-break">
+	{{ add_header(0, 1, doc, letter_head, no_letterhead, print_settings) }}
+
+	<h3 class="text-center" style="margin-bottom:2px">{{ heading }}</h3>
+	<p class="text-center text-muted" style="margin-top:0;font-size:11px">
+		{{ _("For the period") }}
+		{{ frappe.format(doc.from_date, {"fieldtype": "Date"}) }}
+		{{ _("to") }}
+		{{ frappe.format(doc.to_date, {"fieldtype": "Date"}) }}
+		&nbsp;&middot;&nbsp; {{ _("Amounts in") }} {{ doc.currency }}
+		&nbsp;&middot;&nbsp; {{ _("Balance is debit less credit") }}
+	</p>
+
+	<table class="table table-bordered" style="font-size:11px;margin-bottom:4px">
+		<tbody>
+			<tr>
+				<td style="width:18%"><b>{{ party_label }}</b></td>
+				<td style="width:49%">{{ doc.party_display_name or "" }}</td>
+				<td style="width:15%"><b>{{ _("Company") }}</b></td>
+				<td style="width:18%">{{ doc.company }}</td>
+			</tr>
+			{% if doc.tax_id %}
+			<tr>
+				<td><b>{{ _("Tax ID") }}</b></td>
+				<td>{{ doc.tax_id }}</td>
+				<td><b>{{ _("Statement No") }}</b></td>
+				<td>{{ doc.name }}</td>
+			</tr>
+			{% endif %}
+		</tbody>
+	</table>
+
+	<table class="table table-bordered" style="font-size:10px">
+		<thead>
+			<tr>
+				<th style="width:8%">{{ _("Date") }}</th>
+				<th style="width:14%">{{ _("Document No") }}</th>
+				<th style="width:22%">{{ _("Narration") }}</th>
+				<th style="width:10%">{{ _("Cheque No") }}</th>
+				<th style="width:12%">{{ _("Mode of Payment") }}</th>
+				<th class="text-right" style="width:11%">{{ _("Debit") }}</th>
+				<th class="text-right" style="width:11%">{{ _("Credit") }}</th>
+				<th class="text-right" style="width:12%">{{ _("Balance") }}</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr>
+				<td colspan="5"><b>{{ _("Balance brought forward") }}</b></td>
+				<td></td>
+				<td></td>
+				<td class="text-right"><b>{{ money(doc.opening_balance) }}</b></td>
+			</tr>
+
+			{% for row in doc.entries %}
+			<tr>
+				<td>{{ frappe.format(row.posting_date, {"fieldtype": "Date"}) }}</td>
+				<td>{{ row.voucher_no }}</td>
+				<td>{{ row.narration or "" }}</td>
+				<td>{{ row.cheque_no or "" }}</td>
+				<td>{{ row.mode_of_payment or "" }}</td>
+				<td class="text-right">{{ money(row.debit) if row.debit else "" }}</td>
+				<td class="text-right">{{ money(row.credit) if row.credit else "" }}</td>
+				<td class="text-right">{{ money(row.balance) }}</td>
+			</tr>
+			{% if doc.show_remarks and row.remarks %}
+			<tr>
+				<td></td>
+				<td colspan="7" class="text-muted" style="font-size:9px;padding-top:0">
+					{{ row.remarks }}
+				</td>
+			</tr>
+			{% endif %}
+			{% endfor %}
+
+			{% if not doc.entries %}
+			<tr>
+				<td colspan="8" class="text-center text-muted">
+					{{ _("No entries in this period.") }}
+				</td>
+			</tr>
+			{% endif %}
+		</tbody>
+		<tfoot>
+			<tr>
+				<td colspan="5" class="text-right"><b>{{ _("Total for the period") }}</b></td>
+				<td class="text-right"><b>{{ money(doc.total_debit) }}</b></td>
+				<td class="text-right"><b>{{ money(doc.total_credit) }}</b></td>
+				<td></td>
+			</tr>
+			<tr>
+				<td colspan="5" class="text-right"><b>{{ _("Closing balance") }}</b></td>
+				<td></td>
+				<td></td>
+				<td class="text-right"><b>{{ money(doc.closing_balance) }}</b></td>
+			</tr>
+		</tfoot>
+	</table>
+
+	<p class="text-muted" style="font-size:9px;margin-top:8px">
+		{{ _("Closing balance") }} = {{ _("opening") }} {{ money(doc.opening_balance) }}
+		+ {{ _("debit") }} {{ money(doc.total_debit) }}
+		&minus; {{ _("credit") }} {{ money(doc.total_credit) }}
+		= {{ money(doc.closing_balance) }}.
+		{% if doc.generated_on %}
+		{{ _("Generated") }} {{ frappe.format(doc.generated_on, {"fieldtype": "Datetime"}) }}.
+		{% endif %}
+	</p>
+</div>
+{%- endmacro -%}

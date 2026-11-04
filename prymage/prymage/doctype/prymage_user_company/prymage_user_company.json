@@ -1,0 +1,45 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-10-06 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "is_default"
+ ],
+ "fields": [
+  {
+   "columns": 6,
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "default": "0",
+   "description": "The company pre-selected when this user logs in.",
+   "fieldname": "is_default",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Default"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-06 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Prymage",
+ "name": "Prymage User Company",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

@@ -1,0 +1,177 @@
+"""Custom fields added by the Prymage app.
+
+Every field is prefixed ``custom_`` (Frappe's reserved prefix for fields added
+to standard doctypes) so an ERPNext upgrade can never collide with them.
+
+Defined here rather than shipped as fixtures: fixtures are re-imported on every
+``bench migrate`` and silently resurrect fields deleted in a patch, which makes
+the field set impossible to retire cleanly.
+"""
+
+import frappe
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
+# A4 - the master doctypes that get a company tag. ERPNext keeps these as one
+# global list; warehouses, cost centers and projects are already
+# company-specific, so they are deliberately absent.
+SHARED_MASTERS = {
+	"Customer": "language",
+	"Supplier": "release_date",
+	"Item": "image",
+	"Price List": "currency",
+	"Contact": "company_name",
+	"Address": "address_type",
+}
+
+OWNER_COMPANY_FIELD = "custom_owner_company"
+
+
+def _owner_company_field(insert_after: str) -> list[dict]:
+	return [
+		{
+			"fieldname": "custom_prymage_company_section",
+			"label": "Company Ownership",
+			"fieldtype": "Section Break",
+			"insert_after": insert_after,
+			"collapsible": 1,
+		},
+		{
+			"fieldname": OWNER_COMPANY_FIELD,
+			"label": "Owned by Company",
+			"fieldtype": "Link",
+			"options": "Company",
+			"insert_after": "custom_prymage_company_section",
+			"in_standard_filter": 1,
+			"ignore_user_permissions": 1,
+			"description": (
+				"The company this record belongs to. Blank means the record is "
+				"shared with every company. Set automatically from the company "
+				"you are working in when Multi Company data isolation is on."
+			),
+		},
+	]
+
+
+def get_custom_fields() -> dict:
+	fields: dict[str, list[dict]] = {}
+
+	for doctype, anchor in SHARED_MASTERS.items():
+		fields[doctype] = _owner_company_field(anchor)
+
+	# ------------------------------------------------------------------
+	# A2 - company access per user. Mirrors the User Permission records on
+	# Company; see prymage/multi_company/user_companies.py.
+	# ------------------------------------------------------------------
+	fields["User"] = [
+		{
+			"fieldname": "custom_prymage_company_access_tab",
+			"label": "Company Access",
+			"fieldtype": "Tab Break",
+			"insert_after": "api_secret",
+			"depends_on": "eval:doc.user_type=='System User'",
+		},
+		{
+			"fieldname": "custom_allowed_companies",
+			"label": "Allowed Companies",
+			"fieldtype": "Table",
+			"options": "Prymage User Company",
+			"insert_after": "custom_prymage_company_access_tab",
+			"description": (
+				"Companies this user may work in. Saving the user writes these "
+				"rows to User Permission records on Company, which is what "
+				"actually restricts the data the user can see."
+			),
+		},
+	]
+
+	# ------------------------------------------------------------------
+	# C - withholding tax on the amount excluding VAT
+	# ------------------------------------------------------------------
+	fields["Payment Entry"] = [
+		{
+			"fieldname": "custom_prymage_wht_section",
+			"label": "Withholding Tax on Net of VAT",
+			"fieldtype": "Section Break",
+			"insert_after": "tax_withholding_category",
+			"depends_on": "eval:doc.apply_tds",
+			"collapsible": 0,
+		},
+		{
+			"fieldname": "custom_payment_includes_vat",
+			"label": "Payment Includes VAT",
+			"fieldtype": "Check",
+			"insert_after": "custom_prymage_wht_section",
+			"default": "0",
+			"description": (
+				"Tick when the amount being paid includes VAT. The withholding "
+				"tax base is then the amount excluding VAT."
+			),
+		},
+		{
+			"fieldname": "custom_vat_rate",
+			"label": "VAT Rate (%)",
+			"fieldtype": "Percent",
+			"insert_after": "custom_payment_includes_vat",
+			"depends_on": "eval:doc.custom_payment_includes_vat",
+			"description": "Used to back out VAT when no VAT amount is entered.",
+		},
+		{
+			"fieldname": "custom_column_break_prymage_wht",
+			"fieldtype": "Column Break",
+			"insert_after": "custom_vat_rate",
+		},
+		{
+			"fieldname": "custom_vat_amount",
+			"label": "VAT Amount",
+			"fieldtype": "Currency",
+			"options": "paid_from_account_currency",
+			"insert_after": "custom_column_break_prymage_wht",
+			"depends_on": "eval:doc.custom_payment_includes_vat",
+			"description": "Leave blank to derive the VAT from the rate above.",
+		},
+		{
+			"fieldname": "custom_wht_base_amount",
+			"label": "Withholding Tax Base (excl. VAT)",
+			"fieldtype": "Currency",
+			"options": "paid_from_account_currency",
+			"insert_after": "custom_vat_amount",
+			"depends_on": "eval:doc.custom_payment_includes_vat",
+			"read_only": 1,
+			"description": "The amount the withholding tax was actually calculated on.",
+		},
+	]
+
+	return fields
+
+
+def setup_custom_fields():
+	"""Idempotent: safe to run on every install and migrate."""
+	_validate_anchors()
+	create_custom_fields(get_custom_fields(), ignore_validate=False, update=True)
+
+
+def _validate_anchors():
+	"""Fail loudly if an ERPNext upgrade removed a field we insert after.
+
+	Without this the custom field silently lands at the bottom of the form and
+	nobody notices until a user cannot find it.
+	"""
+	problems = []
+	for doctype, fields in get_custom_fields().items():
+		meta = frappe.get_meta(doctype)
+		own = {f["fieldname"] for f in fields}
+		for df in fields:
+			anchor = df.get("insert_after")
+			if not anchor or anchor in own:
+				continue
+			if not meta.get_field(anchor) and anchor not in (
+				meta.get_valid_columns() if hasattr(meta, "get_valid_columns") else []
+			):
+				problems.append(f"{doctype}.{df['fieldname']} -> insert_after '{anchor}' not found")
+
+	if problems:
+		frappe.log_error(
+			title="Prymage: custom field anchors missing",
+			message="\n".join(problems),
+		)
+		print("WARNING Prymage custom field anchors missing:\n  " + "\n  ".join(problems))

@@ -1,0 +1,108 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-10-06 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled_section",
+  "enable_company_data_isolation",
+  "treat_untagged_as_shared",
+  "column_break_enabled",
+  "require_company_selection_on_login",
+  "skip_selection_for_single_company",
+  "allow_multiple_company_selection",
+  "sharing_section",
+  "sharing_help",
+  "company_data_sharing"
+ ],
+ "fields": [
+  {
+   "fieldname": "enabled_section",
+   "fieldtype": "Section Break",
+   "label": "Data Isolation"
+  },
+  {
+   "default": "0",
+   "description": "Master switch. While this is off nothing changes: every company sees every customer, supplier, item, price list, contact and address exactly as standard ERPNext does.",
+   "fieldname": "enable_company_data_isolation",
+   "fieldtype": "Check",
+   "label": "Enable Company Data Isolation"
+  },
+  {
+   "default": "1",
+   "depends_on": "enable_company_data_isolation",
+   "description": "Records with no company tag (everything that existed before this app was installed) stay visible to every company. Untick only after every master record has been tagged.",
+   "fieldname": "treat_untagged_as_shared",
+   "fieldtype": "Check",
+   "label": "Treat Untagged Records as Shared"
+  },
+  {
+   "fieldname": "column_break_enabled",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Send users to the company selection screen after they log in.",
+   "fieldname": "require_company_selection_on_login",
+   "fieldtype": "Check",
+   "label": "Require Company Selection on Login"
+  },
+  {
+   "default": "1",
+   "depends_on": "require_company_selection_on_login",
+   "description": "A user with access to exactly one company goes straight into the system with that company selected.",
+   "fieldname": "skip_selection_for_single_company",
+   "fieldtype": "Check",
+   "label": "Skip Screen for Single-Company Users"
+  },
+  {
+   "default": "1",
+   "description": "Let a user select more than one company at a time. Visibility is then the union of the selected companies; the first one selected supplies the defaults on new documents.",
+   "fieldname": "allow_multiple_company_selection",
+   "fieldtype": "Check",
+   "label": "Allow Selecting Multiple Companies"
+  },
+  {
+   "depends_on": "enable_company_data_isolation",
+   "fieldname": "sharing_section",
+   "fieldtype": "Section Break",
+   "label": "Master Data Sharing per Company"
+  },
+  {
+   "fieldname": "sharing_help",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted small\">A record is visible to the company that owns it, always. A record owned by <i>another</i> company is visible only when <b>both</b> companies tick that box &mdash; the owner has to share it out and the reader has to accept shared data.</p>"
+  },
+  {
+   "fieldname": "company_data_sharing",
+   "fieldtype": "Table",
+   "label": "Company Data Sharing",
+   "options": "Prymage Company Data Sharing"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-06 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Prymage",
+ "name": "Prymage Multi Company Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

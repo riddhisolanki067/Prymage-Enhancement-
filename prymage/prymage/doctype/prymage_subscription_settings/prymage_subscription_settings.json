@@ -1,0 +1,115 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-10-06 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "package_section",
+  "expiry_date",
+  "reminder_days",
+  "column_break_package",
+  "provider_name",
+  "provider_contact",
+  "enforcement_section",
+  "restrict_access_after_expiry",
+  "enforcement_help",
+  "messages_section",
+  "reminder_message",
+  "expired_message"
+ ],
+ "fields": [
+  {
+   "fieldname": "package_section",
+   "fieldtype": "Section Break",
+   "label": "Hosting and Support Package"
+  },
+  {
+   "description": "The date the hosting and support package runs out. Leave blank to switch the whole feature off.",
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "label": "Expiry Date"
+  },
+  {
+   "default": "30",
+   "description": "How many days before expiry the countdown starts appearing at login.",
+   "fieldname": "reminder_days",
+   "fieldtype": "Int",
+   "label": "Start Reminding (Days Before Expiry)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_package",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "provider_name",
+   "fieldtype": "Data",
+   "label": "Service Provider"
+  },
+  {
+   "fieldname": "provider_contact",
+   "fieldtype": "Data",
+   "label": "Provider Contact"
+  },
+  {
+   "fieldname": "enforcement_section",
+   "fieldtype": "Section Break",
+   "label": "Access Restriction"
+  },
+  {
+   "default": "0",
+   "description": "After the expiry date passes, stop every user except the Administrator at login.",
+   "fieldname": "restrict_access_after_expiry",
+   "fieldtype": "Check",
+   "label": "Restrict Access After Expiry"
+  },
+  {
+   "fieldname": "enforcement_help",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted small\"><b>Safety release.</b> If a wrong date ever locks the client out, add <code>\"prymage_subscription_bypass\": 1</code> to <code>site_config.json</code> and run <code>bench --site &lt;site&gt; clear-cache</code>. Login is then allowed for everyone again regardless of the expiry date. The Administrator account is never locked out.</p>"
+  },
+  {
+   "fieldname": "messages_section",
+   "fieldtype": "Section Break",
+   "label": "Messages"
+  },
+  {
+   "default": "Your ERPNext Hosting and Support Package will expire in {days} days (Expiry Date: {date}). Don't hesitate to get in touch with your ERPNext Service Providers.",
+   "description": "Shown from the reminder threshold onwards. Placeholders: {days}, {date}, {provider}.",
+   "fieldname": "reminder_message",
+   "fieldtype": "Small Text",
+   "label": "Reminder Message"
+  },
+  {
+   "default": "Your ERPNext Hosting and Support Package expired on {date}. Don't hesitate to get in touch with your service provider to renew your Package to continue enjoying the services.",
+   "description": "Shown once the expiry date has passed. Placeholders: {days}, {date}, {provider}.",
+   "fieldname": "expired_message",
+   "fieldtype": "Small Text",
+   "label": "Expired Message"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-06 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Prymage",
+ "name": "Prymage Subscription Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Prymage Subscription Administrator",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
