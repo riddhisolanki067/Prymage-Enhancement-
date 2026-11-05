@@ -13,8 +13,9 @@ hide:
 
 The rule, for the set of companies ``S`` the user currently has selected:
 
-* a record with no company tag is visible when *Treat Untagged Records as
-  Shared* is on (the default, so an existing site does not change on day one);
+* a record with **no** company tag is always visible, to every company - this
+  is what keeps the feature from hiding anything on the day it is switched on,
+  before a client has tagged their existing data;
 * a record owned by a company in ``S`` is always visible;
 * a record owned by another company is visible only when that owner shares the
   entity **and** at least one company in ``S`` accepts shared data.
@@ -85,19 +86,14 @@ def build_conditions(doctype: str, user: str | None = None) -> str:
 	table = f"`tab{doctype}`"
 	column = f"{table}.`{OWNER_FIELD}`"
 
-	clauses = []
-	if settings.treat_untagged_as_shared:
-		clauses.append(f"({column} is null or {column} = '')")
+	# An untagged record is always shared - unconditionally, there is no
+	# setting that can turn this off. See the module docstring.
+	clauses = [f"({column} is null or {column} = '')"]
 
 	visible = get_visible_companies(doctype, user)
 	if visible:
 		values = ", ".join(frappe.db.escape(company) for company in visible)
 		clauses.append(f"{column} in ({values})")
-
-	if not clauses:
-		# Isolation is on, the user has no company at all and untagged records
-		# are not shared: show nothing rather than everything.
-		return "1 = 0"
 
 	return "(" + " or ".join(clauses) + ")"
 
@@ -116,7 +112,8 @@ def has_permission(doc, ptype=None, user=None, debug=False):
 
 	owner_company = doc.get(OWNER_FIELD)
 	if not owner_company:
-		return bool(settings.treat_untagged_as_shared)
+		# Unconditional - see build_conditions() and the module docstring.
+		return True
 
 	return owner_company in get_visible_companies(doctype, user)
 

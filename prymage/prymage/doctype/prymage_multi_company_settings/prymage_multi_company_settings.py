@@ -87,7 +87,6 @@ def get_settings() -> frappe._dict:
 		doc = frappe.get_cached_doc("Prymage Multi Company Settings")
 		return {
 			"enabled": bool(doc.enable_company_data_isolation),
-			"treat_untagged_as_shared": bool(doc.treat_untagged_as_shared),
 			"require_selection": bool(doc.require_company_selection_on_login),
 			"skip_single": bool(doc.skip_selection_for_single_company),
 			"allow_multiple": bool(doc.allow_multiple_company_selection),

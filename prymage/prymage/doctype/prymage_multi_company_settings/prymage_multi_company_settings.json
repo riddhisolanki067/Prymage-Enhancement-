@@ -8,7 +8,6 @@
  "field_order": [
   "enabled_section",
   "enable_company_data_isolation",
-  "treat_untagged_as_shared",
   "column_break_enabled",
   "require_company_selection_on_login",
   "skip_selection_for_single_company",
@@ -25,18 +24,10 @@
   },
   {
    "default": "0",
-   "description": "Master switch. While this is off nothing changes: every company sees every customer, supplier, item, price list, contact and address exactly as standard ERPNext does.",
+   "description": "Master switch. While this is off nothing changes: every company sees every customer, supplier, item, price list, contact and address exactly as standard ERPNext does. A record with no company tag is always treated as shared, so turning this on never hides anything that has not been tagged yet.",
    "fieldname": "enable_company_data_isolation",
    "fieldtype": "Check",
    "label": "Enable Company Data Isolation"
-  },
-  {
-   "default": "1",
-   "depends_on": "enable_company_data_isolation",
-   "description": "Records with no company tag (everything that existed before this app was installed) stay visible to every company. Untick only after every master record has been tagged.",
-   "fieldname": "treat_untagged_as_shared",
-   "fieldtype": "Check",
-   "label": "Treat Untagged Records as Shared"
   },
   {
    "fieldname": "column_break_enabled",
@@ -73,7 +64,7 @@
   {
    "fieldname": "sharing_help",
    "fieldtype": "HTML",
-   "options": "<p class=\"text-muted small\">A record is visible to the company that owns it, always. A record owned by <i>another</i> company is visible only when <b>both</b> companies tick that box &mdash; the owner has to share it out and the reader has to accept shared data.</p>"
+   "options": "<p class=\"text-muted small\">A record is visible to the company that owns it, always. A record owned by <i>another</i> company is visible only when <b>both</b> companies tick that box &mdash; the owner has to share it out and the reader has to accept shared data. A record with <b>no</b> owner at all is always treated as shared, with every company.</p>"
   },
   {
    "fieldname": "company_data_sharing",
