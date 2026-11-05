@@ -15,19 +15,32 @@ ERPNext enhancements for Prymage, built from the client-approved
 ```bash
 bench --site <site> install-app prymage
 bench --site <site> execute prymage.install.after_migrate   # re-run after a pull
+bench build --app prymage
 ```
 
 Data isolation ships **off**. Nothing changes until an administrator ticks
 *Enable Company Data Isolation* in **Prymage Multi Company Settings**.
 
-### Verification
+### Where each requirement lives
 
-```bash
-bench --site <site> execute prymage.tests.verify.run
-```
+| Requirement | Doctype / screen | Code |
+|---|---|---|
+| A1 Company selection on login | **Select Company** page | `prymage/multi_company/session.py`, `prymage/public/js/prymage.bundle.js` |
+| A2 Company access per user | *Company Access* tab on **User** | `prymage/multi_company/user_companies.py` |
+| A3 Multi-Company Settings | **Prymage Multi Company Settings** | `prymage/prymage/doctype/prymage_multi_company_settings/` |
+| A4 Company tagging | *Company Ownership* section on Customer/Supplier/Item/Price List/Contact/Address | `prymage/multi_company/tagging.py`, `prymage/custom_fields.py` |
+| A5 Visibility rules | — | `prymage/multi_company/permissions.py` |
+| A6 Audit trail | Version history on the settings doc | `track_changes` on the doctype |
+| B Subscription expiry | **Prymage Subscription Settings** | `prymage/subscription/guard.py` |
+| C Withholding tax ex-VAT | *Withholding Tax on Net of VAT* section on Payment Entry | `prymage/overrides/payment_entry.py`, `prymage/overrides/purchase_invoice.py` |
+| D Ledger statements | **Prymage Ledger Statement** + 3 print formats | `prymage/prymage/doctype/prymage_ledger_statement/` |
 
-Builds its own fixtures, exercises every requirement and asserts the ledger
-statements against ERPNext's own General Ledger report.
+### Verifying a figure
+
+The ledger statement is built from GL Entry using the same rules ERPNext's own
+**General Ledger** report uses. To check a statement, run the General Ledger
+report with the same company, party and period — the totals should match
+exactly.
 
 #### License
 

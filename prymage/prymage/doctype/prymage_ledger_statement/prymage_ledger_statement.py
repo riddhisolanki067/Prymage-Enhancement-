@@ -15,8 +15,9 @@ report always agree:
 * only entries with no finance book are included, which is what the General
   Ledger report does unless a finance book is explicitly chosen.
 
-``prymage/tests/verify.py`` asserts the figures against
-``erpnext.accounts.report.general_ledger.execute`` for every statement it builds.
+Cross-check any statement by running ERPNext's own **General Ledger** report
+(``erpnext.accounts.report.general_ledger``) with the same company, party and
+period - the totals should match exactly.
 """
 
 import frappe

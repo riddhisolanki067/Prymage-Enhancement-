@@ -6,3 +6,7 @@ tags
 node_modules
 __pycache__
 *.eslintcache
+
+# Built JS/CSS - Frappe Cloud (and any `bench build`) regenerates these from
+# public/js and public/css. Committing the hashed output just drifts from source.
+/prymage/public/dist/
