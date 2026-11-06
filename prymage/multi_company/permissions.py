@@ -17,8 +17,11 @@ The rule, for the set of companies ``S`` the user currently has selected:
   is what keeps the feature from hiding anything on the day it is switched on,
   before a client has tagged their existing data;
 * a record owned by a company in ``S`` is always visible;
-* a record owned by another company is visible only when that owner shares the
-  entity **and** at least one company in ``S`` accepts shared data.
+* a record owned by another company is visible only when **all three** hold:
+  that owner shares the entity, at least one company in ``S`` accepts shared
+  data, **and** the user holds a standing User Permission for that owner
+  company. Sharing extends what a company with access can see; it is never
+  a substitute for being given access in the first place.
 
 Known limit, stated plainly: Query Reports that build their own SQL are not
 interceptable by any Frappe hook, so a master-data Query Report can still show
@@ -50,15 +53,30 @@ def get_effective_companies(user: str | None = None) -> list[str]:
 
 
 def get_visible_companies(doctype: str, user: str | None = None) -> list[str]:
-	"""Companies whose records of `doctype` this user may see."""
+	"""Companies whose records of `doctype` this user may see.
+
+	Sharing alone is not enough to pull another company's records into view -
+	the user must also hold a standing User Permission for that company
+	(``get_allowed_companies``, requirement A2). Without this, ticking two
+	companies to share with each other would leak their master data to a user
+	who was deliberately never given access to one of them, with no way to
+	stop it short of turning sharing off for everyone. ``get_allowed_companies``
+	already returns every company when the site has no User Permissions set up
+	at all, so a site that never configured A2 is unaffected.
+	"""
 	settings = get_settings()
 	own = get_effective_companies(user)
+	allowed = set(get_allowed_companies(user))
 
 	accepts_shared = any(shares(settings, company, doctype) for company in own)
 	if not accepts_shared:
 		return sorted(set(own))
 
-	sharing = [company for company in settings.sharing if shares(settings, company, doctype)]
+	sharing = [
+		company
+		for company in settings.sharing
+		if shares(settings, company, doctype) and company in allowed
+	]
 	return sorted(set(own) | set(sharing))
 
 
