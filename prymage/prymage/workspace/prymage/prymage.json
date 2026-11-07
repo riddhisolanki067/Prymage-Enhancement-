@@ -80,6 +80,18 @@
    "type": "Link"
   },
   {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Multi Company Audit Trail",
+   "link_count": 0,
+   "link_to": "Prymage Multi Company Audit Trail",
+   "link_type": "Report",
+   "onboard": 0,
+   "only_for": "",
+   "type": "Link"
+  },
+  {
    "hidden": 0,
    "is_query_report": 0,
    "label": "Subscription",
@@ -176,7 +188,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-10-06 10:00:00.000000",
+ "modified": "2026-11-07 18:30:00.000000",
  "modified_by": "Administrator",
  "module": "Prymage",
  "name": "Prymage",

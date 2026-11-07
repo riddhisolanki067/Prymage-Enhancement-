@@ -30,7 +30,7 @@ Data isolation ships **off**. Nothing changes until an administrator ticks
 | A3 Multi-Company Settings | **Prymage Multi Company Settings** | `prymage/prymage/doctype/prymage_multi_company_settings/` |
 | A4 Company tagging | *Company Ownership* section on Customer/Supplier/Item/Price List/Contact/Address | `prymage/multi_company/tagging.py`, `prymage/custom_fields.py` |
 | A5 Visibility rules | — | `prymage/multi_company/permissions.py` |
-| A6 Audit trail | Version history on the settings doc | `track_changes` on the doctype |
+| A6 Audit trail | **Prymage Multi Company Audit Trail** report | `prymage/prymage/report/prymage_multi_company_audit_trail/` (built on `track_changes`, which stays on) |
 | B Subscription expiry | **Prymage Subscription Settings** | `prymage/subscription/guard.py` |
 | C Withholding tax ex-VAT | *Withholding Tax on Net of VAT* section on Payment Entry | `prymage/overrides/payment_entry.py`, `prymage/overrides/purchase_invoice.py` |
 | D Ledger statements | **Prymage Ledger Statement** + 3 print formats | `prymage/prymage/doctype/prymage_ledger_statement/` |
