@@ -1,26 +1,22 @@
 """Withholding tax on the amount excluding VAT (requirement C).
 
-What ERPNext v16 already does, verified in source
-(``erpnext/accounts/doctype/tax_withholding_entry/tax_withholding_entry.py``):
+The requirement document's own wording and worked example ("Invoice Total:
+GHS 12,000.00 ... Net Payment to Supplier: GHS 11,250.00") describe a Payment
+Entry that settles an invoice, not specifically a payment made in advance of
+one. ``PaymentTaxWithholding._update_taxable_amounts`` - verified in source,
+``erpnext/accounts/doctype/tax_withholding_entry/tax_withholding_entry.py`` -
+only ever counts ``unallocated_amount`` plus amounts allocated to a Sales/
+Purchase *Order*; an amount allocated against an *Invoice* is always excluded,
+because ERPNext assumes the invoice already withheld. This module applies on
+any Payment Entry with VAT - settling an invoice or not - with one guard:
 
-* **On a Purchase Invoice** the taxable amount is ``item.base_net_amount``
-  unless the Tax Withholding Category's ``tax_deduction_basis`` is
-  ``Gross Total``. The field ships defaulted to ``Net Total``, so withholding
-  taken at the invoice already excludes VAT. Nothing to build - that is why
-  requirement C line 10 is a configuration and process correction, and why
-  ``purchase_invoice.validate_withholding_basis`` only warns when a category is
-  set to ``Gross Total``.
-
-* **On a Payment Entry** ``PaymentTaxWithholding._update_taxable_amounts`` uses
-  ``unallocated_amount`` plus anything allocated to an advance payment document
-  (Sales Order / Purchase Order). It does not look at
-  ``tax_deduction_basis`` and it has no way to know what part of the payment is
-  VAT - there is no invoice to take the VAT out of. That is the gap this module
-  closes (requirement C line 11).
-
-Amounts allocated against an *invoice* are deliberately excluded from the
-withholding base by ERPNext, because the invoice has already withheld. This
-module does not change that.
+**an allocation is only ever counted once.** If the invoice being settled
+already had ``apply_tds`` ticked, it has already withheld (requirement C,
+line 10, which needs no code - ERPNext gets that case right by itself). This
+module excludes exactly that allocation from the Payment Entry's base, so the
+same transaction is never withheld twice. An allocation against an invoice
+that was *not* itself withholding (or against a Sales/Purchase Order, which
+never withholds) is counted normally.
 """
 
 import frappe
@@ -32,35 +28,45 @@ from erpnext.accounts.doctype.tax_withholding_entry.tax_withholding_entry import
 )
 
 
-class PrymageAdvancePaymentTaxWithholding(PaymentTaxWithholding):
-	"""Same engine, with VAT taken out of the taxable amount."""
+class PrymagePaymentTaxWithholding(PaymentTaxWithholding):
+	"""Same engine, with VAT taken out of the taxable amount.
+
+	Does not call ``super()._update_taxable_amounts()`` - the base
+	implementation's own allocation filter is exactly what needs widening, so
+	there is nothing to inherit from it here.
+	"""
 
 	def _update_taxable_amounts(self):
-		super()._update_taxable_amounts()
-
 		category = next(iter(self.category_details.values()), None)
 		if not category:
 			return
 
-		gross = flt(category.get("taxable_amount"))
+		gross_in_party_currency = flt(self.doc.unallocated_amount)
+		for row in self.doc.references:
+			if _reference_already_withheld(row.reference_doctype, row.reference_name):
+				continue
+			gross_in_party_currency += flt(row.allocated_amount)
+
+		exchange_rate = self.get_conversion_rate() or 1
+		gross = flt(gross_in_party_currency * exchange_rate, self.precision)
+
 		if not gross:
+			category["taxable_amount"] = 0
 			self.doc.custom_wht_base_amount = 0
 			return
 
-		exchange_rate = self.get_conversion_rate() or 1
-		vat_in_base_currency = flt(
-			_vat_component(self.doc, gross / exchange_rate) * exchange_rate, self.precision
-		)
+		vat_in_party_currency = _vat_component(self.doc, gross_in_party_currency)
+		vat = flt(vat_in_party_currency * exchange_rate, self.precision)
 
-		net = flt(gross - vat_in_base_currency, self.precision)
+		net = flt(gross - vat, self.precision)
 		if net < 0:
 			frappe.throw(
 				_(
 					"The VAT entered ({0}) is larger than the amount the withholding tax "
 					"would be calculated on ({1})."
 				).format(
-					frappe.format(vat_in_base_currency / exchange_rate, {"fieldtype": "Currency"}),
-					frappe.format(gross / exchange_rate, {"fieldtype": "Currency"}),
+					frappe.format(vat_in_party_currency, {"fieldtype": "Currency"}),
+					frappe.format(gross_in_party_currency, {"fieldtype": "Currency"}),
 				)
 			)
 
@@ -68,6 +74,18 @@ class PrymageAdvancePaymentTaxWithholding(PaymentTaxWithholding):
 		# Shown read-only on the form so the figure can be checked without
 		# reverse-engineering it from the tax row.
 		self.doc.custom_wht_base_amount = flt(net / exchange_rate, self.doc.precision("paid_amount"))
+
+
+def _reference_already_withheld(reference_doctype: str, reference_name: str) -> bool:
+	"""Did this reference's own document already withhold tax on itself?
+
+	Only an Invoice can - a Sales/Purchase Order is never accounting-posted and
+	never has an ``apply_tds`` of its own, so it is never excluded here.
+	"""
+	if not frappe.get_meta(reference_doctype).has_field("apply_tds"):
+		return False
+
+	return bool(frappe.db.get_value(reference_doctype, reference_name, "apply_tds"))
 
 
 def _vat_component(doc, gross_in_party_currency: float) -> float:
@@ -118,7 +136,7 @@ class PrymagePaymentEntryExtension:
 			self.custom_wht_base_amount = 0
 			return
 
-		PrymageAdvancePaymentTaxWithholding(self).on_validate()
+		PrymagePaymentTaxWithholding(self).on_validate()
 
 
 def validate_vat_exclusion(doc, method=None):
