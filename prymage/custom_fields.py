@@ -97,47 +97,54 @@ def get_custom_fields() -> dict:
 			"collapsible": 0,
 		},
 		{
-			"fieldname": "custom_payment_includes_vat",
-			"label": "Payment Includes VAT",
-			"fieldtype": "Check",
-			"insert_after": "custom_prymage_wht_section",
-			"default": "0",
-			"description": (
-				"Tick when the amount being paid includes VAT. The withholding "
-				"tax base is then the amount excluding VAT."
-			),
-		},
-		{
-			"fieldname": "custom_vat_rate",
-			"label": "VAT Rate (%)",
-			"fieldtype": "Percent",
-			"insert_after": "custom_payment_includes_vat",
-			"depends_on": "eval:doc.custom_payment_includes_vat",
-			"description": "Used to back out VAT when no VAT amount is entered.",
-		},
-		{
-			"fieldname": "custom_column_break_prymage_wht",
-			"fieldtype": "Column Break",
-			"insert_after": "custom_vat_rate",
-		},
-		{
-			"fieldname": "custom_vat_amount",
-			"label": "VAT Amount",
-			"fieldtype": "Currency",
-			"options": "paid_from_account_currency",
-			"insert_after": "custom_column_break_prymage_wht",
-			"depends_on": "eval:doc.custom_payment_includes_vat",
-			"description": "Leave blank to derive the VAT from the rate above.",
-		},
-		{
 			"fieldname": "custom_wht_base_amount",
 			"label": "Withholding Tax Base (excl. VAT)",
 			"fieldtype": "Currency",
 			"options": "paid_from_account_currency",
-			"insert_after": "custom_vat_amount",
-			"depends_on": "eval:doc.custom_payment_includes_vat",
+			"insert_after": "custom_prymage_wht_section",
 			"read_only": 1,
-			"description": "The amount the withholding tax was actually calculated on.",
+			"description": (
+				"The amount the withholding tax was actually calculated on. For any "
+				"amount allocated against an invoice or order, VAT is excluded "
+				"automatically by reading that document's own net total - nothing "
+				"to enter here. Only the unallocated (advance) portion of this "
+				"payment, if any, depends on the fields below."
+			),
+		},
+		{
+			"fieldname": "custom_column_break_prymage_wht",
+			"fieldtype": "Column Break",
+			"insert_after": "custom_wht_base_amount",
+		},
+		{
+			"fieldname": "custom_payment_includes_vat",
+			"label": "Unallocated Amount Includes VAT",
+			"fieldtype": "Check",
+			"insert_after": "custom_column_break_prymage_wht",
+			"default": "0",
+			"depends_on": "eval:doc.unallocated_amount",
+			"description": (
+				"Only matters for the unallocated part of this payment - a genuine "
+				"advance, with no invoice or order to read VAT from. Tick this when "
+				"that unallocated amount itself includes VAT."
+			),
+		},
+		{
+			"fieldname": "custom_vat_rate",
+			"label": "VAT Rate (%) on the Unallocated Amount",
+			"fieldtype": "Percent",
+			"insert_after": "custom_payment_includes_vat",
+			"depends_on": "eval:doc.custom_payment_includes_vat",
+			"description": "Used to back out VAT when no VAT amount is entered below.",
+		},
+		{
+			"fieldname": "custom_vat_amount",
+			"label": "VAT Amount on the Unallocated Amount",
+			"fieldtype": "Currency",
+			"options": "paid_from_account_currency",
+			"insert_after": "custom_vat_rate",
+			"depends_on": "eval:doc.custom_payment_includes_vat",
+			"description": "Leave blank to derive the VAT from the rate above.",
 		},
 	]
 
