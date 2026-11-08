@@ -55,7 +55,15 @@ class PrymagePaymentTaxWithholding(PaymentTaxWithholding):
 			self.doc.custom_wht_base_amount = 0
 			return
 
-		vat_in_party_currency = _vat_component(self.doc, gross_in_party_currency)
+		# VAT is only backed out when the payment is flagged as VAT-inclusive.
+		# Without the tick there is nothing to exclude, but the widened base
+		# above (invoice allocations included) still applies - whether this
+		# payment withholds at all is a separate question from whether VAT
+		# needs excluding from what it withholds on.
+		if self.doc.get("custom_payment_includes_vat"):
+			vat_in_party_currency = _vat_component(self.doc, gross_in_party_currency)
+		else:
+			vat_in_party_currency = 0.0
 		vat = flt(vat_in_party_currency * exchange_rate, self.precision)
 
 		net = flt(gross - vat, self.precision)
@@ -128,14 +136,15 @@ class PrymagePaymentEntryExtension:
 	def validate(self):
 		super().validate()
 
-		if not self.get("custom_payment_includes_vat"):
-			self.custom_wht_base_amount = 0
-			return
-
 		if not self.apply_tds or not self.tax_withholding_category:
 			self.custom_wht_base_amount = 0
 			return
 
+		# Always re-run with the widened base (invoice allocations included,
+		# already-withheld ones excluded) - this must not be gated behind the
+		# VAT checkbox, or a payment that settles an invoice without VAT
+		# involved silently falls back to ERPNext's own narrow, advance-only
+		# calculation, which excludes invoice allocations entirely.
 		PrymagePaymentTaxWithholding(self).on_validate()
 
 
