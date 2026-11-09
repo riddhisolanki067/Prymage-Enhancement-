@@ -8,7 +8,7 @@ ERPNext enhancements for Prymage, built from the client-approved
 | **A** | Multi-company management — company selection screen after login, company access per user, a Multi-Company Settings screen, company tagging on shared master records, visibility rules applied in list views / link fields / reports, and an audit trail of sharing changes |
 | **B** | Cloud subscription expiry — settings screen, countdown from 30 days before expiry at every login, and access restriction for everyone but the Administrator once expired (with a safety release) |
 | **C** | Withholding tax calculated on the amount excluding VAT, at the invoice and on advance payments |
-| **D** | Customer, Supplier and Account ledger statement print formats, each with its own company's letterhead and logo |
+| **D** | Customer, Supplier and Account ledger statement print formats, against ERPNext's own General Ledger report |
 
 ### Setup
 
@@ -33,14 +33,25 @@ Data isolation ships **off**. Nothing changes until an administrator ticks
 | A6 Audit trail | **Prymage Multi Company Audit Trail** report | `prymage/prymage/report/prymage_multi_company_audit_trail/` (built on `track_changes`, which stays on) |
 | B Subscription expiry | **Prymage Subscription Settings** | `prymage/subscription/guard.py` |
 | C Withholding tax ex-VAT | *Withholding Tax on Net of VAT* section on Payment Entry | `prymage/overrides/payment_entry.py`, `prymage/overrides/purchase_invoice.py` |
-| D Ledger statements | **Prymage Ledger Statement** + 3 print formats | `prymage/prymage/doctype/prymage_ledger_statement/` |
+| C withholding split on the ledger | monkey-patches ERPNext's **General Ledger** report `execute()` | `prymage/overrides/general_ledger_report.py` |
+| D Ledger statements | 3 Print Formats against **GL Entry**, selected from General Ledger's own Print dialog | `prymage/prymage/print_format/prymage_supplier_ledger_statement/`, `prymage_customer_ledger_statement/`, `prymage_account_ledger_statement/` |
 
-### Verifying a figure
+### Printing a ledger statement
 
-The ledger statement is built from GL Entry using the same rules ERPNext's own
-**General Ledger** report uses. To check a statement, run the General Ledger
-report with the same company, party and period — the totals should match
-exactly.
+No custom doctype: run ERPNext's own **General Ledger** report (Accounting > General Ledger),
+filter by Supplier / Customer / Account as usual, then **Print** and pick **Prymage Supplier
+Ledger Statement** / **Prymage Customer Ledger Statement** / **Prymage Account Ledger
+Statement** from the Print Format dropdown. A withholding-tax payment shows as two lines - net
+payment and "Withholding Tax Deducted" - automatically, on screen and in the printout; this is
+done by patching the report's own `execute()` (see `general_ledger_report.py`'s own docstring for
+why, and the explicit tradeoff that was accepted). Letterhead is the report print dialog's own
+standard "With Letterhead" picker - not automatic per company; pick the right one for whichever
+company you're printing.
+
+These Print Formats are only valid printed from the General Ledger report itself (via the Print
+dialog, which renders them client-side against the report's own `data`/`filters`/`columns`) - not
+from opening a single GL Entry document or a GL Entry list view, which render Jinja server-side
+with different syntax (`or` instead of `||`) and a different context.
 
 #### License
 

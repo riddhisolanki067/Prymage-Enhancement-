@@ -122,18 +122,6 @@
   {
    "dependencies": "",
    "hidden": 0,
-   "is_query_report": 0,
-   "label": "Prymage Ledger Statement",
-   "link_count": 0,
-   "link_to": "Prymage Ledger Statement",
-   "link_type": "DocType",
-   "onboard": 1,
-   "only_for": "",
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
    "is_query_report": 1,
    "label": "General Ledger",
    "link_count": 0,
@@ -188,7 +176,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-11-07 18:30:00.000000",
+ "modified": "2026-11-10 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Prymage",
  "name": "Prymage",

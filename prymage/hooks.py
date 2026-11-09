@@ -32,15 +32,6 @@ on_session_creation = [
 
 on_logout = "prymage.multi_company.session.on_logout"
 
-
-# ---------------------------------------------------------------------------
-# A ledger statement is a snapshot report. Its entry rows carry a Dynamic Link
-# to the voucher so a user can click through, but without this hook that link
-# would make Frappe refuse to delete or cancel any voucher that appears on a
-# saved statement - a report must never hold the ledger hostage.
-# ---------------------------------------------------------------------------
-ignore_links_on_delete = ["Prymage Ledger Statement"]
-
 # ---------------------------------------------------------------------------
 # A5 - visibility rules for shared master data
 # ---------------------------------------------------------------------------
