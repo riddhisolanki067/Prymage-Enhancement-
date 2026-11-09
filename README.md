@@ -34,7 +34,7 @@ Data isolation ships **off**. Nothing changes until an administrator ticks
 | B Subscription expiry | **Prymage Subscription Settings** | `prymage/subscription/guard.py` |
 | C Withholding tax ex-VAT | *Withholding Tax on Net of VAT* section on Payment Entry | `prymage/overrides/payment_entry.py`, `prymage/overrides/purchase_invoice.py` |
 | C withholding split on the ledger | monkey-patches ERPNext's **General Ledger** report `execute()` | `prymage/overrides/general_ledger_report.py` |
-| D Ledger statements | 3 Print Formats against **GL Entry**, selected from General Ledger's own Print dialog | `prymage/prymage/print_format/prymage_supplier_ledger_statement/`, `prymage_customer_ledger_statement/`, `prymage_account_ledger_statement/` |
+| D Ledger statements | 3 Print Formats (`print_format_for: Report`, bound to the **General Ledger** report itself), selected from its own Print dialog | `prymage/fixtures/print_format.json` |
 
 ### Printing a ledger statement
 
@@ -48,10 +48,17 @@ why, and the explicit tradeoff that was accepted). Letterhead is the report prin
 standard "With Letterhead" picker - not automatic per company; pick the right one for whichever
 company you're printing.
 
-These Print Formats are only valid printed from the General Ledger report itself (via the Print
-dialog, which renders them client-side against the report's own `data`/`filters`/`columns`) - not
-from opening a single GL Entry document or a GL Entry list view, which render Jinja server-side
-with different syntax (`or` instead of `||`) and a different context.
+Each one is `print_format_for: Report`, `report: General Ledger`, `print_format_type: JS` - the
+native Frappe fields for a report-bound print format, not `doc_type`. Report-bound Print Formats
+are rendered client-side against the report's own `data`/`filters`/`columns` by a JS micro-template
+engine, not server Jinja2 (`||` not `or`) - and `print_format_for: Report` also means Frappe's own
+Print dialog only ever offers these three when printing the General Ledger report itself; they
+don't show up anywhere else, by design, not just by convention.
+
+Shipped as a fixture (`prymage/fixtures/print_format.json`), not a module-folder `standard: Yes`
+doctype: Frappe's own `PrintFormat.before_save()` forces `standard = "No"` on any
+`print_format_for: Report` record the moment it is saved, which the module-folder sync mechanism
+(`reload_doc`) does not manage.
 
 #### License
 

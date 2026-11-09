@@ -33,6 +33,30 @@ on_session_creation = [
 on_logout = "prymage.multi_company.session.on_logout"
 
 # ---------------------------------------------------------------------------
+# D - the 3 ledger-statement print formats. A Report-bound Print Format is
+# forced to standard="No" by Frappe's own PrintFormat.before_save() the
+# moment it is saved, so it cannot be managed the normal module-folder
+# standard="Yes" way (reload_doc skips non-standard documents entirely).
+# Shipped as a fixture instead - idempotently re-synced on every migrate.
+# ---------------------------------------------------------------------------
+fixtures = [
+	{
+		"doctype": "Print Format",
+		"filters": [
+			[
+				"name",
+				"in",
+				(
+					"Prymage Supplier Ledger Statement",
+					"Prymage Customer Ledger Statement",
+					"Prymage Account Ledger Statement",
+				),
+			]
+		],
+	}
+]
+
+# ---------------------------------------------------------------------------
 # A5 - visibility rules for shared master data
 # ---------------------------------------------------------------------------
 permission_query_conditions = {
