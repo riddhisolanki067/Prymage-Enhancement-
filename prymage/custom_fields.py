@@ -111,6 +111,11 @@ def get_custom_fields() -> dict:
 			"options": "paid_from_account_currency",
 			"insert_after": "custom_prymage_wht_section",
 			"read_only": 1,
+			# Explicitly cleared - see the matching comment on
+			# custom_payment_includes_vat below for why this can't be omitted.
+			# An earlier design hid this field unless the checkbox was ticked;
+			# it is meant to always show now.
+			"depends_on": "",
 			"description": (
 				"The amount withholding tax is actually calculated on. With 'Include "
 				"VAT' unticked (the default), VAT is excluded automatically - read "
@@ -130,6 +135,12 @@ def get_custom_fields() -> dict:
 			"fieldtype": "Check",
 			"insert_after": "custom_column_break_prymage_wht",
 			"default": "0",
+			# Explicitly cleared, not just omitted: an earlier design scoped this
+			# checkbox to the unallocated leg only via this same depends_on.
+			# create_custom_fields(update=True) only writes keys present in the
+			# dict - a key left out is NOT reset, so an old value lingers in the
+			# database until something overwrites it with an explicit "".
+			"depends_on": "",
 			"description": (
 				"Leave unticked to withhold on the VAT-excluded amount, read "
 				"automatically off the invoice/order this payment settles. Tick "
