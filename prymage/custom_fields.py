@@ -120,8 +120,8 @@ def get_custom_fields() -> dict:
 				"The amount withholding tax is actually calculated on. With 'Include "
 				"VAT' unticked (the default), VAT is excluded automatically - read "
 				"straight off the net total of whichever invoice/order this payment "
-				"settles, nothing to enter here. Tick 'Include VAT' to fall back to "
-				"standard ERPNext withholding instead, with VAT included."
+				"settles, nothing to enter here. Tick 'Include VAT' to use the full "
+				"allocated/unallocated amount instead, VAT included."
 			),
 		},
 		{
@@ -144,8 +144,7 @@ def get_custom_fields() -> dict:
 			"description": (
 				"Leave unticked to withhold on the VAT-excluded amount, read "
 				"automatically off the invoice/order this payment settles. Tick "
-				"only to use standard ERPNext withholding instead, which includes "
-				"VAT in the base."
+				"to withhold on the full amount instead, VAT included."
 			),
 		},
 	]

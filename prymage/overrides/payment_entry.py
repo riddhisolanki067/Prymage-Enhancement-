@@ -6,23 +6,28 @@ amount, not its VAT-inclusive total. A Payment Entry settling that invoice
 already carries the invoice's own VAT breakdown - nothing needs to be typed
 in manually to use it.
 
-One checkbox, **Include VAT**, decides which base this Payment Entry
-withholds on:
+One checkbox, **Include VAT**, decides whether VAT is excluded from the
+base. Both states use the same engine - unallocated amount, plus every
+reference's allocated amount, minus whatever a reference that already
+withheld tax on itself (``apply_tds`` ticked there - requirement C line 10,
+which needs no code, ERPNext gets it right by itself) contributes, so the
+same transaction is never withheld twice - the only difference is whether
+each allocated amount is scaled down to its VAT-excluded share first:
 
-* **Unticked (default)** - VAT is excluded from the base. For any amount
-  allocated against an Invoice or Order, the VAT-excluded base is read
-  straight from that document's own ``net_total`` / ``grand_total`` ratio -
-  no manual rate, it comes from the real document, prorated for a partial
-  allocation. An invoice that already withheld tax on itself (``apply_tds``
-  ticked there - requirement C line 10, which needs no code, ERPNext gets it
-  right by itself) is excluded from this payment's base entirely, so the
-  same transaction is never withheld twice. The unallocated portion (a
-  genuine advance, with no document to read VAT from) is used as-is.
-* **Ticked** - standard ERPNext withholding, unmodified: the base is
-  whatever ``PaymentTaxWithholding._update_taxable_amounts`` computes out of
-  the box (unallocated amount plus anything allocated against a Sales/
-  Purchase Order), VAT included. Only tick this for a payment that genuinely
-  should not have VAT excluded.
+* **Unticked (default)** - VAT is excluded. For any amount allocated
+  against an Invoice or Order, the VAT-excluded base is read straight from
+  that document's own ``net_total`` / ``grand_total`` ratio - no manual
+  rate, it comes from the real document, prorated for a partial allocation.
+* **Ticked** - VAT is included: the base is the allocated/unallocated
+  amount as posted, unscaled.
+
+Deliberately does not fall back to stock ERPNext's own
+``PaymentTaxWithholding._update_taxable_amounts`` for the ticked case: that
+method only ever counts the unallocated amount plus anything allocated
+against a Sales/Purchase *Order* - an amount allocated against an *Invoice*
+is silently worth zero to it. A payment settling an invoice with the
+checkbox ticked would withhold nothing at all, which is not what "Include
+VAT" is supposed to mean.
 """
 
 import frappe
@@ -34,42 +39,37 @@ from erpnext.accounts.doctype.tax_withholding_entry.tax_withholding_entry import
 
 
 class PrymagePaymentTaxWithholding(PaymentTaxWithholding):
-	"""Same engine; only the VAT-excluded base path replaces the base totals.
-
-	When "Include VAT" is ticked, ``super()._update_taxable_amounts()`` runs
-	untouched - this class only takes over to exclude VAT.
+	"""Same engine for both checkbox states; only whether VAT is scaled out
+	of each reference's allocated amount differs. Does not call
+	``super()._update_taxable_amounts()`` at all - see the module docstring
+	for why the stock method is unusable here even for "Include VAT" ticked.
 	"""
 
 	def _update_taxable_amounts(self):
-		if self.doc.get("custom_payment_includes_vat"):
-			super()._update_taxable_amounts()
-			category = next(iter(self.category_details.values()), None)
-			exchange_rate = self.get_conversion_rate() or 1
-			self.doc.custom_wht_base_amount = flt(
-				flt((category or {}).get("taxable_amount", 0)) / exchange_rate,
-				self.doc.precision("paid_amount"),
-			)
-			return
-
 		category = next(iter(self.category_details.values()), None)
 		if not category:
 			return
 
-		net_of_vat = flt(self.doc.unallocated_amount)
+		include_vat = bool(self.doc.get("custom_payment_includes_vat"))
+
+		base = flt(self.doc.unallocated_amount)
 		for row in self.doc.references:
 			if _reference_already_withheld(row.reference_doctype, row.reference_name):
 				continue
-			net_of_vat += flt(row.allocated_amount) * _net_of_tax_fraction(
-				row.reference_doctype, row.reference_name
+			fraction = (
+				1.0
+				if include_vat
+				else _net_of_tax_fraction(row.reference_doctype, row.reference_name)
 			)
+			base += flt(row.allocated_amount) * fraction
 
-		net_of_vat = flt(net_of_vat, self.precision)
+		base = flt(base, self.precision)
 		exchange_rate = self.get_conversion_rate() or 1
 
-		category["taxable_amount"] = flt(net_of_vat * exchange_rate, self.precision)
+		category["taxable_amount"] = flt(base * exchange_rate, self.precision)
 		# Shown read-only on the form so the figure can be checked without
 		# reverse-engineering it from the tax row.
-		self.doc.custom_wht_base_amount = flt(net_of_vat, self.doc.precision("paid_amount"))
+		self.doc.custom_wht_base_amount = flt(base, self.doc.precision("paid_amount"))
 
 
 def _reference_already_withheld(reference_doctype: str, reference_name: str) -> bool:
