@@ -247,7 +247,7 @@ def build_statement(statement_type: str, company: str, party: str, from_date, to
 			}
 		)
 
-	entries = _split_withholding_lines(entries, precision)
+	entries = split_withholding_lines(entries, precision)
 
 	return {
 		"currency": currency,
@@ -259,9 +259,20 @@ def build_statement(statement_type: str, company: str, party: str, from_date, to
 	}
 
 
-def _split_withholding_lines(entries: list, precision: int) -> list:
+def split_withholding_lines(entries: list, precision: int) -> list:
 	"""Requirement C, 'Presentation in the report': the ledger statement must
 	show a withholding deduction as its own line, separate from the net amount.
+
+	Not module-private: also reused by
+	``prymage/overrides/general_ledger_report.py`` to apply the same split to
+	ERPNext's own stock General Ledger report. Row shape (``debit``, ``credit``,
+	``balance``, ``voucher_type``, ``voucher_no``) matches that report's result
+	rows closely enough to work as-is, with one difference handled below: the
+	General Ledger report's Opening/Total/Closing summary rows carry no
+	``voucher_type``/``voucher_no`` key at all (not even ``None`` - a real
+	``KeyError`` the first version of this function hit), and it labels a row's
+	counter-account ``against`` rather than this doctype's ``against_account``,
+	with no ``narration`` field at all.
 
 	ERPNext's own GL posting for a Payment Entry that withholds tax is already
 	correct money-wise - the withheld amount genuinely never leaves the bank
@@ -277,7 +288,8 @@ def _split_withholding_lines(entries: list, precision: int) -> list:
 	deducted, that still sum to exactly the original amount. The underlying
 	ledger - and every balance already computed above - is untouched.
 	"""
-	pe_names = {e["voucher_no"] for e in entries if e["voucher_type"] == "Payment Entry"}
+	pe_names = {e.get("voucher_no") for e in entries if e.get("voucher_type") == "Payment Entry"}
+	pe_names.discard(None)
 	if not pe_names:
 		return entries
 
@@ -298,29 +310,31 @@ def _split_withholding_lines(entries: list, precision: int) -> list:
 
 	occurrences: dict[str, int] = {}
 	for e in entries:
-		if e["voucher_type"] == "Payment Entry":
-			occurrences[e["voucher_no"]] = occurrences.get(e["voucher_no"], 0) + 1
+		if e.get("voucher_type") == "Payment Entry":
+			occurrences[e.get("voucher_no")] = occurrences.get(e.get("voucher_no"), 0) + 1
 
 	result = []
 	for e in entries:
 		withheld = (
-			withheld_by_voucher.get(e["voucher_no"]) if e["voucher_type"] == "Payment Entry" else None
+			withheld_by_voucher.get(e.get("voucher_no"))
+			if e.get("voucher_type") == "Payment Entry"
+			else None
 		)
 		# Only split a voucher with exactly one line in this party's ledger -
 		# a payment withholding against several references at once would need
 		# to attribute the single combined tax amount across several rows,
 		# which this does not attempt; such a row is left exactly as posted.
-		if not withheld or occurrences.get(e["voucher_no"]) != 1:
+		if not withheld or occurrences.get(e.get("voucher_no")) != 1:
 			result.append(e)
 			continue
 
-		original_debit, original_credit = flt(e["debit"]), flt(e["credit"])
+		original_debit, original_credit = flt(e.get("debit")), flt(e.get("credit"))
 		side, original = ("debit", original_debit) if original_debit else ("credit", original_credit)
 		if withheld >= original:
 			result.append(e)
 			continue
 
-		previous_balance = flt(e["balance"] - original_debit + original_credit, precision)
+		previous_balance = flt(flt(e.get("balance")) - original_debit + original_credit, precision)
 		net_amount = flt(original - withheld, precision)
 
 		net_row = dict(e)
@@ -334,9 +348,18 @@ def _split_withholding_lines(entries: list, precision: int) -> list:
 		wht_row = dict(e)
 		wht_row["debit"] = flt(withheld, precision) if side == "debit" else 0
 		wht_row["credit"] = flt(withheld, precision) if side == "credit" else 0
-		wht_row["narration"] = _("Withholding Tax Deducted")
-		wht_row["against_account"] = ""
-		wht_row["balance"] = e["balance"]
+		label = _("Withholding Tax Deducted")
+		if "narration" in wht_row:
+			# Prymage Ledger Statement: the label belongs in Narration, with
+			# Against Account blanked out since it no longer means anything
+			# for this split-out row.
+			wht_row["narration"] = label
+			wht_row["against_account"] = ""
+		elif "against" in wht_row:
+			# Stock General Ledger report: no narration column at all -
+			# Against Account is the only visible slot for the label.
+			wht_row["against"] = label
+		wht_row["balance"] = flt(e.get("balance"))
 		result.append(wht_row)
 
 	return result
