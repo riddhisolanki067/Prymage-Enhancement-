@@ -83,9 +83,6 @@ doc_events = {
 		"onload": "prymage.multi_company.user_companies.load_allowed_companies",
 		"on_update": "prymage.multi_company.user_companies.sync_allowed_companies",
 	},
-	"Payment Entry": {
-		"validate": "prymage.overrides.payment_entry.validate_vat_exclusion",
-	},
 	"Purchase Invoice": {
 		"validate": "prymage.overrides.purchase_invoice.validate_withholding_basis",
 	},

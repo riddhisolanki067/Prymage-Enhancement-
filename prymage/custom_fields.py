@@ -25,6 +25,14 @@ SHARED_MASTERS = {
 
 OWNER_COMPANY_FIELD = "custom_owner_company"
 
+# Fields once defined below, now retired. ``create_custom_fields`` only
+# creates/updates what is in ``get_custom_fields()`` - it never deletes a
+# field that used to be there, so a retired field has to be dropped
+# explicitly or it lingers on the form forever.
+RETIRED_FIELDS = {
+	"Payment Entry": ["custom_vat_rate", "custom_vat_amount"],
+}
+
 
 def _owner_company_field(insert_after: str) -> list[dict]:
 	return [
@@ -98,17 +106,17 @@ def get_custom_fields() -> dict:
 		},
 		{
 			"fieldname": "custom_wht_base_amount",
-			"label": "Withholding Tax Base (excl. VAT)",
+			"label": "Withholding Tax Base",
 			"fieldtype": "Currency",
 			"options": "paid_from_account_currency",
 			"insert_after": "custom_prymage_wht_section",
 			"read_only": 1,
 			"description": (
-				"The amount the withholding tax was actually calculated on. For any "
-				"amount allocated against an invoice or order, VAT is excluded "
-				"automatically by reading that document's own net total - nothing "
-				"to enter here. Only the unallocated (advance) portion of this "
-				"payment, if any, depends on the fields below."
+				"The amount withholding tax is actually calculated on. With 'Include "
+				"VAT' unticked (the default), VAT is excluded automatically - read "
+				"straight off the net total of whichever invoice/order this payment "
+				"settles, nothing to enter here. Tick 'Include VAT' to fall back to "
+				"standard ERPNext withholding instead, with VAT included."
 			),
 		},
 		{
@@ -118,33 +126,16 @@ def get_custom_fields() -> dict:
 		},
 		{
 			"fieldname": "custom_payment_includes_vat",
-			"label": "Unallocated Amount Includes VAT",
+			"label": "Include VAT",
 			"fieldtype": "Check",
 			"insert_after": "custom_column_break_prymage_wht",
 			"default": "0",
-			"depends_on": "eval:doc.unallocated_amount",
 			"description": (
-				"Only matters for the unallocated part of this payment - a genuine "
-				"advance, with no invoice or order to read VAT from. Tick this when "
-				"that unallocated amount itself includes VAT."
+				"Leave unticked to withhold on the VAT-excluded amount, read "
+				"automatically off the invoice/order this payment settles. Tick "
+				"only to use standard ERPNext withholding instead, which includes "
+				"VAT in the base."
 			),
-		},
-		{
-			"fieldname": "custom_vat_rate",
-			"label": "VAT Rate (%) on the Unallocated Amount",
-			"fieldtype": "Percent",
-			"insert_after": "custom_payment_includes_vat",
-			"depends_on": "eval:doc.custom_payment_includes_vat",
-			"description": "Used to back out VAT when no VAT amount is entered below.",
-		},
-		{
-			"fieldname": "custom_vat_amount",
-			"label": "VAT Amount on the Unallocated Amount",
-			"fieldtype": "Currency",
-			"options": "paid_from_account_currency",
-			"insert_after": "custom_vat_rate",
-			"depends_on": "eval:doc.custom_payment_includes_vat",
-			"description": "Leave blank to derive the VAT from the rate above.",
 		},
 	]
 
@@ -155,6 +146,15 @@ def setup_custom_fields():
 	"""Idempotent: safe to run on every install and migrate."""
 	_validate_anchors()
 	create_custom_fields(get_custom_fields(), ignore_validate=False, update=True)
+	_retire_fields()
+
+
+def _retire_fields():
+	for doctype, fieldnames in RETIRED_FIELDS.items():
+		for fieldname in fieldnames:
+			docname = f"{doctype}-{fieldname}"
+			if frappe.db.exists("Custom Field", docname):
+				frappe.delete_doc("Custom Field", docname, ignore_permissions=True)
 
 
 def _validate_anchors():
