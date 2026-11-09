@@ -247,6 +247,8 @@ def build_statement(statement_type: str, company: str, party: str, from_date, to
 			}
 		)
 
+	entries = _split_withholding_lines(entries, precision)
+
 	return {
 		"currency": currency,
 		"opening_balance": opening,
@@ -255,6 +257,89 @@ def build_statement(statement_type: str, company: str, party: str, from_date, to
 		"closing_balance": flt(opening + total_debit - total_credit, precision),
 		"entries": entries,
 	}
+
+
+def _split_withholding_lines(entries: list, precision: int) -> list:
+	"""Requirement C, 'Presentation in the report': the ledger statement must
+	show a withholding deduction as its own line, separate from the net amount.
+
+	ERPNext's own GL posting for a Payment Entry that withholds tax is already
+	correct money-wise - the withheld amount genuinely never leaves the bank
+	account, and the books balance. It just attaches that adjustment to the
+	*bank* account's ledger, not the party's, so a party-filtered GL Entry
+	query (which is what the statement is built from) only ever shows the one
+	combined line. Reworking that at the GL-posting level would mean also
+	reworking how invoice outstanding-amount reconciliation reads these
+	entries - real risk of an invoice permanently showing as outstanding when
+	it has actually been fully settled. The requirement document itself scopes
+	this as presentation, not posting, so it is done here instead: split the
+	one combined line into two *display* rows, net payment and withholding
+	deducted, that still sum to exactly the original amount. The underlying
+	ledger - and every balance already computed above - is untouched.
+	"""
+	pe_names = {e["voucher_no"] for e in entries if e["voucher_type"] == "Payment Entry"}
+	if not pe_names:
+		return entries
+
+	withheld_by_voucher: dict[str, float] = {}
+	for row in frappe.get_all(
+		"Advance Taxes and Charges",
+		filters={
+			"parenttype": "Payment Entry",
+			"parent": ("in", list(pe_names)),
+			"is_tax_withholding_account": 1,
+		},
+		fields=["parent", "tax_amount"],
+	):
+		withheld_by_voucher[row.parent] = withheld_by_voucher.get(row.parent, 0) + flt(row.tax_amount)
+	withheld_by_voucher = {k: v for k, v in withheld_by_voucher.items() if v}
+	if not withheld_by_voucher:
+		return entries
+
+	occurrences: dict[str, int] = {}
+	for e in entries:
+		if e["voucher_type"] == "Payment Entry":
+			occurrences[e["voucher_no"]] = occurrences.get(e["voucher_no"], 0) + 1
+
+	result = []
+	for e in entries:
+		withheld = (
+			withheld_by_voucher.get(e["voucher_no"]) if e["voucher_type"] == "Payment Entry" else None
+		)
+		# Only split a voucher with exactly one line in this party's ledger -
+		# a payment withholding against several references at once would need
+		# to attribute the single combined tax amount across several rows,
+		# which this does not attempt; such a row is left exactly as posted.
+		if not withheld or occurrences.get(e["voucher_no"]) != 1:
+			result.append(e)
+			continue
+
+		original_debit, original_credit = flt(e["debit"]), flt(e["credit"])
+		side, original = ("debit", original_debit) if original_debit else ("credit", original_credit)
+		if withheld >= original:
+			result.append(e)
+			continue
+
+		previous_balance = flt(e["balance"] - original_debit + original_credit, precision)
+		net_amount = flt(original - withheld, precision)
+
+		net_row = dict(e)
+		net_row["debit"] = net_amount if side == "debit" else 0
+		net_row["credit"] = net_amount if side == "credit" else 0
+		net_row["balance"] = flt(
+			previous_balance + net_row["debit"] - net_row["credit"], precision
+		)
+		result.append(net_row)
+
+		wht_row = dict(e)
+		wht_row["debit"] = flt(withheld, precision) if side == "debit" else 0
+		wht_row["credit"] = flt(withheld, precision) if side == "credit" else 0
+		wht_row["narration"] = _("Withholding Tax Deducted")
+		wht_row["against_account"] = ""
+		wht_row["balance"] = e["balance"]
+		result.append(wht_row)
+
+	return result
 
 
 def _get_gl_entries(statement_type, company, party, to_date, ignore_is_opening):
