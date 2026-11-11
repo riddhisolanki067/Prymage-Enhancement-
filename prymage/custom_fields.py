@@ -14,9 +14,18 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 # A4 - the master doctypes that get a company tag. ERPNext keeps these as one
 # global list; warehouses, cost centers and projects are already
 # company-specific, so they are deliberately absent.
+#
+# Every anchor here is the last field of whichever tab renders first on this
+# site's actual form - not just "some real field" (a Section Break anchored
+# to a field inside a *later* tab renders itself in that later tab, however
+# early the field appears in SHARED_MASTERS; verified directly against
+# frappe.get_meta() on this site, which is not always the same field order
+# as a vanilla ERPNext install - Customer's own former anchor, "language",
+# was found to render in "More Info" here, not the first tab, the same way
+# Supplier's former anchor "release_date" rendered inside "Connections").
 SHARED_MASTERS = {
-	"Customer": "language",
-	"Supplier": "release_date",
+	"Customer": "default_price_list",
+	"Supplier": "customer_numbers",
 	"Item": "image",
 	"Price List": "currency",
 	"Contact": "company_name",
@@ -51,10 +60,24 @@ def _owner_company_field(insert_after: str) -> list[dict]:
 			"insert_after": "custom_prymage_company_section",
 			"in_standard_filter": 1,
 			"ignore_user_permissions": 1,
+			# Not a blanket `reqd: 1` - blank is the deliberate safe default
+			# (see the description below and permissions.py's own module
+			# docstring): an untagged record is unconditionally shared, which
+			# is what keeps switching this feature on from hiding anything
+			# before a client has tagged their existing data. Mandatory only
+			# once Data Isolation is actually on, which is exactly the
+			# situation where leaving this blank by accident is a real
+			# mistake worth blocking on the form. `isolation_enabled` is
+			# already in bootinfo - see prymage/boot.py.
+			"mandatory_depends_on": (
+				"eval:frappe.boot.prymage_multi_company "
+				"&& frappe.boot.prymage_multi_company.isolation_enabled"
+			),
 			"description": (
 				"The company this record belongs to. Blank means the record is "
 				"shared with every company. Set automatically from the company "
-				"you are working in when Multi Company data isolation is on."
+				"you are working in when Multi Company data isolation is on, "
+				"and required on the form whenever isolation is on."
 			),
 		},
 	]
@@ -157,6 +180,62 @@ def setup_custom_fields():
 	_validate_anchors()
 	create_custom_fields(get_custom_fields(), ignore_validate=False, update=True)
 	_retire_fields()
+	_reposition_owner_company_fields()
+
+
+def _reposition_owner_company_fields():
+	"""Force the Company Ownership section back next to its anchor field.
+
+	``create_custom_fields(update=True)`` writes a changed ``insert_after``
+	onto an *existing* Custom Field, but that alone does not move it - the
+	field's rendered position is driven by ``idx``, which Frappe only derives
+	from ``insert_after`` the moment a field is first created. Changing
+	``insert_after`` on a field that already exists (exactly the case here,
+	the first time an anchor in ``SHARED_MASTERS`` changes on a site that
+	already has these fields) leaves it sitting wherever its *old* anchor put
+	it - confirmed directly against this site's own DB after the Customer/
+	Supplier anchor fix below, not assumed.
+
+	The sanctioned way to actually move an existing field, without the data
+	loss risk of deleting and recreating the Custom Field (which drops the
+	column, and therefore every value already stored in it), is the same
+	mechanism the Customize Form screen itself uses: reorder the in-memory
+	field list and call ``save_customization()`` - see
+	``frappe/custom/doctype/customize_form/customize_form.py``, which sets
+	``idx`` from list position on save.
+	"""
+	for doctype, anchor in SHARED_MASTERS.items():
+		meta = frappe.get_meta(doctype)
+		fieldnames = [f.fieldname for f in meta.fields]
+		if anchor not in fieldnames or "custom_prymage_company_section" not in fieldnames:
+			continue
+
+		anchor_idx = fieldnames.index(anchor)
+		section_idx = fieldnames.index("custom_prymage_company_section")
+		if section_idx == anchor_idx + 1:
+			# Owner field normally follows the section immediately; already
+			# fine if not an older customization put something else there.
+			continue
+
+		cf = frappe.get_doc("Customize Form")
+		cf.doc_type = doctype
+		cf.fetch_to_customize()
+
+		own_names = {"custom_prymage_company_section", OWNER_COMPANY_FIELD}
+		own_rows = [r for r in cf.fields if r.fieldname in own_names]
+		if len(own_rows) < 2:
+			continue
+
+		remaining = [r for r in cf.fields if r.fieldname not in own_names]
+		insert_pos = next(i for i, r in enumerate(remaining) if r.fieldname == anchor) + 1
+		own_rows.sort(key=lambda r: 0 if r.fieldname == "custom_prymage_company_section" else 1)
+		for offset, row in enumerate(own_rows):
+			remaining.insert(insert_pos + offset, row)
+
+		cf.fields = remaining
+		for i, row in enumerate(cf.fields):
+			row.idx = i + 1
+		cf.save_customization()
 
 
 def _retire_fields():
