@@ -17,18 +17,11 @@ from frappe.model.document import Document
 CACHE_KEY = "prymage_multi_company_settings"
 
 #: Used only to seed the registry the first time this app runs on a site
-#: (``prymage/install.py``) and to migrate the old fixed-Check-column
-#: sharing table into the new per-doctype matrix on a site that already has
-#: it (same file). Nothing else reads this - the live registry
-#: (``shareable_doctypes``) is the only source of truth from here on.
-DEFAULT_SHAREABLE_DOCTYPES = {
-	"Customer": "default_price_list",
-	"Supplier": "customer_numbers",
-	"Item": "image",
-	"Price List": "currency",
-	"Contact": "company_name",
-	"Address": "address_type",
-}
+#: (``prymage/install.py``). Nothing else reads this - the live registry
+#: (``shareable_doctypes``) is the only source of truth from here on. Where
+#: each one's "Owned by Company" field lands is computed live, not stored -
+#: see ``_first_tab_anchor()`` in ``prymage/custom_fields.py``.
+DEFAULT_SHAREABLE_DOCTYPES = ["Customer", "Supplier", "Item", "Price List", "Contact", "Address"]
 
 #: Old fixed Check column -> doctype(s) it used to gate. Only read by the
 #: one-time legacy migration in install.py.
@@ -181,6 +174,14 @@ def get_settings() -> frappe._dict:
 		# of "normal" failure modes to enumerate here, so this catches
 		# broadly and logs rather than enumerate them one at a time as each
 		# is discovered the hard way.
+		#
+		# frappe.log_error(), not used here on purpose: it inserts an Error
+		# Log *document*, which fires this same "*" before_insert hook again
+		# for doctype="Error Log" - is_shareable() -> get_settings() -> the
+		# same failure -> log_error() again -> infinite recursion, confirmed
+		# directly (a real RecursionError, not a hypothetical). A plain
+		# Python logger never creates a document, so it cannot re-enter this
+		# hook at all.
 		try:
 			doc = frappe.get_cached_doc("Prymage Multi Company Settings")
 			shareable_doctypes = {row.document_type for row in doc.shareable_doctypes if row.document_type}
@@ -188,7 +189,7 @@ def get_settings() -> frappe._dict:
 			for row in doc.company_doctype_sharing:
 				sharing.setdefault(row.company, {})[row.document_type] = bool(row.is_shared)
 		except Exception:
-			frappe.log_error(title="Prymage: multi company settings failed to load")
+			frappe.logger("prymage").error("multi company settings failed to load", exc_info=True)
 			return empty
 
 		return {

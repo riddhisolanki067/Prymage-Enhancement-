@@ -76,11 +76,8 @@ def seed_multi_company_settings():
 	changed = False
 
 	if not doc.shareable_doctypes:
-		for document_type, anchor in DEFAULT_SHAREABLE_DOCTYPES.items():
-			doc.append(
-				"shareable_doctypes",
-				{"document_type": document_type, "insert_after_field": anchor},
-			)
+		for document_type in DEFAULT_SHAREABLE_DOCTYPES:
+			doc.append("shareable_doctypes", {"document_type": document_type})
 		changed = True
 
 	if _migrate_legacy_sharing_table(doc):

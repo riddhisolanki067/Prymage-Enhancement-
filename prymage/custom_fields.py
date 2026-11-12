@@ -19,17 +19,56 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 # existed) are seeded once by install.py; nothing here reads that seed list
 # again afterwards.
 #
-# Every anchor must be the last field of whichever tab renders *first* on
-# the actual site's form - not just "some real field" (a Section Break
-# anchored to a field inside a *later* tab renders itself in that later tab,
-# however early the field appears in the registry; verified directly
-# against frappe.get_meta() on this site, which is not always the same
-# field order as a vanilla ERPNext install - Customer's own anchor used to
-# be "language", which was found to render in "More Info" here, not the
-# first tab, the same way Supplier's former anchor "release_date" rendered
-# inside "Connections").
+# Where it lands is computed, not picked: nobody is asked to choose an
+# anchor field. _first_tab_anchor() below reads the doctype's own live
+# field order to find the last field of whichever tab renders *first* -
+# necessary, not just convenient, because a Section Break anchored to a
+# field inside a *later* tab renders itself in that later tab, however
+# early the field happens to appear in the registry. This must be computed
+# against this site's actual form, not assumed from a vanilla ERPNext
+# install, which can differ - Customer's field used to be anchored after
+# "language", which on this site turned out to render in "More Info", not
+# the first tab, the same way Supplier's former anchor "release_date"
+# rendered inside "Connections".
 
 OWNER_COMPANY_FIELD = "custom_owner_company"
+OWN_FIELDNAMES = {"custom_prymage_company_section", OWNER_COMPANY_FIELD}
+
+
+def _first_tab_anchor(doctype: str) -> str:
+	"""The real fieldname to insert the Company Ownership section after, so
+	it lands in whichever tab renders first on this doctype's actual form.
+
+	Ignores this app's own fields if they are already there (a second run on
+	a doctype that already has them must not anchor against itself) - the
+	anchor is always computed against what the form would look like without
+	Prymage's own fields, so it is stable across repeated runs, not just the
+	first one.
+	"""
+	fields = [f for f in frappe.get_meta(doctype).fields if f.fieldname not in OWN_FIELDNAMES]
+	if not fields:
+		return ""
+
+	tab_break_indexes = [i for i, f in enumerate(fields) if f.fieldtype == "Tab Break"]
+	if not tab_break_indexes:
+		# No tabs at all - the whole form is one page; append after its
+		# last real field, which is functionally the same as "the end of
+		# the first (only) tab".
+		return fields[-1].fieldname
+
+	first_break = tab_break_indexes[0]
+	if first_break > 0:
+		# The common case: real fields precede the first Tab Break (an
+		# implicit tab Frappe's own UI labels "Details" by default) - anchor
+		# on the last of them.
+		return fields[first_break - 1].fieldname
+
+	# The doctype's very first field already IS a Tab Break (e.g. Item's own
+	# explicit "Details" tab, which still has to count as "the first tab" -
+	# anchor on the last field before whatever tab comes *after* it, or the
+	# end of the form if that is the only tab there is.
+	next_break = tab_break_indexes[1] if len(tab_break_indexes) > 1 else len(fields)
+	return fields[next_break - 1].fieldname
 
 # Fields once defined below, now retired. ``create_custom_fields`` only
 # creates/updates what is in ``get_custom_fields()`` - it never deletes a
@@ -80,8 +119,8 @@ def _owner_company_field(insert_after: str) -> list[dict]:
 	]
 
 
-def get_shareable_doctypes() -> list[dict]:
-	"""Live read of the registry: ``[{"document_type": ..., "insert_after_field": ...}, ...]``.
+def get_shareable_doctypes() -> list[str]:
+	"""Live read of the registry: the list of registered DocType names.
 
 	Empty, not an error, before the first migrate has ever run on a fresh
 	site (the table does not exist yet) - ``setup()`` seeds the registry
@@ -93,16 +132,16 @@ def get_shareable_doctypes() -> list[dict]:
 	return frappe.get_all(
 		"Prymage Shareable Doctype",
 		filters={"parenttype": "Prymage Multi Company Settings"},
-		fields=["document_type", "insert_after_field"],
+		pluck="document_type",
 	)
 
 
 def get_custom_fields() -> dict:
 	fields: dict[str, list[dict]] = {}
 
-	for row in get_shareable_doctypes():
-		if row.document_type:
-			fields[row.document_type] = _owner_company_field(row.insert_after_field or "")
+	for document_type in get_shareable_doctypes():
+		if document_type:
+			fields[document_type] = _owner_company_field(_first_tab_anchor(document_type))
 
 	# ------------------------------------------------------------------
 	# A2 - company access per user. Mirrors the User Permission records on
@@ -206,10 +245,10 @@ def _reposition_owner_company_fields():
 	field's rendered position is driven by ``idx``, which Frappe only derives
 	from ``insert_after`` the moment a field is first created. Changing
 	``insert_after`` on a field that already exists (exactly the case the
-	first time an entry's ``insert_after_field`` changes in the registry on a
-	site that already has this field) leaves it sitting wherever its *old*
-	anchor put it - confirmed directly against this site's own DB after the
-	Customer/Supplier anchor fix, not assumed.
+	first time a doctype's *computed* anchor moves - e.g. an ERPNext upgrade
+	reorders its form - on a site that already has this field) leaves it
+	sitting wherever its *old* anchor put it - confirmed directly against
+	this site's own DB after the Customer/Supplier anchor fix, not assumed.
 
 	The sanctioned way to actually move an existing field, without the data
 	loss risk of deleting and recreating the Custom Field (which drops the
@@ -219,10 +258,13 @@ def _reposition_owner_company_fields():
 	``frappe/custom/doctype/customize_form/customize_form.py``, which sets
 	``idx`` from list position on save.
 	"""
-	for row in get_shareable_doctypes():
-		doctype, anchor = row.document_type, row.insert_after_field
-		if not doctype or not anchor:
-			# Blank anchor means "append at the end" - nothing to reposition.
+	for doctype in get_shareable_doctypes():
+		if not doctype:
+			continue
+		anchor = _first_tab_anchor(doctype)
+		if not anchor:
+			# No tab structure and no other fields at all - nothing to
+			# reposition against.
 			continue
 
 		meta = frappe.get_meta(doctype)
