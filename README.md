@@ -56,14 +56,21 @@ in place deliberately; retire it by hand (see `RETIRED_FIELDS` in
 ### Printing a ledger statement
 
 No custom doctype: run ERPNext's own **General Ledger** report (Accounting > General Ledger),
-filter by Supplier / Customer / Account as usual, then **Print** and pick **Prymage Supplier
-Ledger Statement** / **Prymage Customer Ledger Statement** / **Prymage Account Ledger
-Statement** from the Print Format dropdown. A withholding-tax payment shows as two lines - net
-payment and "Withholding Tax Deducted" - automatically, on screen and in the printout; this is
-done by patching the report's own `execute()` (see `general_ledger_report.py`'s own docstring for
-why, and the explicit tradeoff that was accepted). Letterhead is the report print dialog's own
-standard "With Letterhead" picker - not automatic per company; pick the right one for whichever
-company you're printing.
+filter by Supplier / Customer / Account as usual, **set Group By to "Categorize by Voucher
+(Consolidated)"** (one continuous Opening/.../Closing, matching the client's own reference layout
+exactly - the report's own default groups per voucher instead, which prints as several small
+Opening/Closing fragments), then **Print** and pick **Prymage Supplier Ledger Statement** /
+**Prymage Customer Ledger Statement** / **Prymage Account Ledger Statement** from the Print
+Format dropdown. Layout (title, From/To, ID/Name/Address, the 8 columns, Remarks rows, the
+closing Total/Balance lines, ₵ formatting with parentheses for a negative balance) matches the
+client's own reference images exactly - verified against them directly, not approximated. A
+withholding-tax payment shows as two lines - net payment and "Withholding Tax Deducted" -
+automatically, on screen and in the printout; this is done by patching the report's own
+`execute()` (see `general_ledger_report.py`'s own docstring for why, and the explicit tradeoff
+that was accepted), which also adds cheque number, mode of payment and remarks to every row - none
+of which the stock report selects by default - needed to match the reference layout. Letterhead is
+the report print dialog's own standard "With Letterhead" picker - not automatic per company; pick
+the right one for whichever company you're printing.
 
 Each one is `print_format_for: Report`, `report: General Ledger`, `print_format_type: JS` - the
 native Frappe fields for a report-bound print format, not `doc_type`. Report-bound Print Formats

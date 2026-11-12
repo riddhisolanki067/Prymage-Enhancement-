@@ -18,11 +18,19 @@ already in muscle memory).
 
 Requirement D's three print formats (Customer / Supplier / plain Account)
 are built directly against this same report - see
-``prymage/prymage/print_format/`` - rather than against any document of
+``prymage/fixtures/print_format.json`` - rather than against any document of
 ours: Frappe's report Print dialog can render a named Print Format against
 the report's own already-computed ``data``/``columns``, the exact rows
 shown on screen, split included. No separate doctype, no recomputed
 balances - what prints is what this patch already produced.
+
+To match the client's own reference layout for those three formats exactly,
+each row also needs a cheque number, mode of payment and remarks - none of
+which the stock report selects by default (``remarks`` only when the
+"Show Remarks" filter is ticked; the other two never). ``_enrich_for_print``
+below adds them unconditionally, the same way requirement D's own,
+now-deleted doctype used to (``VOUCHER_FIELD_MAP`` is the same idea, kept
+here since this is the only place left that needs it).
 """
 
 import frappe
@@ -49,6 +57,19 @@ def patch_general_ledger_report():
 
 	def patched_execute(filters=None):
 		columns, res = original_execute(filters)
+
+		# Enrichment first, split second: the split's own synthetic
+		# "Withholding Tax Deducted" row sets its own narration deliberately
+		# (see split_withholding_lines) - if enrichment ran after, its
+		# blanket "every row gets a narration" pass would overwrite that
+		# right back to the voucher's ordinary payment type/voucher type.
+		# Running first just means both split-out rows (net and withheld)
+		# inherit the same cheque_no/mode_of_payment/remarks from the one
+		# real voucher they came from, which is correct either way.
+		try:
+			res = _enrich_for_print(res)
+		except Exception:
+			frappe.log_error(title="Prymage: General Ledger print enrichment failed")
 
 		try:
 			precision = frappe.get_precision("GL Entry", "debit") or 2
@@ -144,10 +165,92 @@ def split_withholding_lines(entries: list, precision: int) -> list:
 		wht_row = dict(e)
 		wht_row["debit"] = flt(withheld, precision) if side == "debit" else 0
 		wht_row["credit"] = flt(withheld, precision) if side == "credit" else 0
-		# No narration column on this report - Against Account is the only
-		# visible slot available to label the split-out row.
+		# Against Account is the label on the stock report's own columns;
+		# narration is the label on the Customer/Supplier print formats,
+		# which have no Against Account column at all - both get set so the
+		# split-out row reads correctly wherever it ends up being shown.
 		wht_row["against"] = _("Withholding Tax Deducted")
+		if "narration" in wht_row:
+			wht_row["narration"] = _("Withholding Tax Deducted")
 		wht_row["balance"] = flt(e.get("balance"))
 		result.append(wht_row)
 
 	return result
+
+
+#: Where the cheque number, mode of payment and payment type live on each
+#: voucher type the print formats need them for. Resolved against the
+#: doctype meta at run time, so a field that does not exist on a given
+#: ERPNext version degrades to blank instead of raising.
+VOUCHER_FIELD_MAP = {
+	"Payment Entry": {
+		"cheque_no": "reference_no",
+		"mode_of_payment": "mode_of_payment",
+		"payment_type": "payment_type",
+	},
+	"Journal Entry": {
+		"cheque_no": "cheque_no",
+		"mode_of_payment": "mode_of_payment",
+	},
+}
+
+
+def _enrich_for_print(entries: list) -> list:
+	"""Adds ``cheque_no``, ``mode_of_payment``, ``narration`` and ``remarks``
+	to every row - none of which the stock report selects by default
+	(``remarks`` only with "Show Remarks" ticked; the other three never) -
+	needed to match the client's own reference ledger-statement layout. Pure
+	addition: nothing already on a row is touched, the normal on-screen
+	grid ignores keys its own columns do not reference, so this has no
+	effect there.
+
+	``narration`` here means "what kind of transaction was this", not an
+	actual Narration/remarks field: the client's own reference print format
+	shows the bare payment type (``Pay`` / ``Receive``) for a Payment Entry,
+	and the plain voucher type (e.g. ``Purchase Invoice``) for anything
+	else - never a reworded label.
+	"""
+	names_by_type: dict[str, set] = {}
+	gl_entry_names = set()
+	for e in entries:
+		voucher_type, voucher_no = e.get("voucher_type"), e.get("voucher_no")
+		if voucher_type and voucher_no:
+			names_by_type.setdefault(voucher_type, set()).add(voucher_no)
+		if e.get("gl_entry"):
+			gl_entry_names.add(e["gl_entry"])
+
+	voucher_details: dict[tuple, dict] = {}
+	for voucher_type, names in names_by_type.items():
+		mapping = VOUCHER_FIELD_MAP.get(voucher_type)
+		if not mapping or not frappe.db.exists("DocType", voucher_type):
+			continue
+		meta = frappe.get_meta(voucher_type)
+		available = {key: field for key, field in mapping.items() if meta.get_field(field)}
+		if not available:
+			continue
+		for row in frappe.get_all(
+			voucher_type,
+			filters={"name": ("in", list(names))},
+			fields=["name", *available.values()],
+			ignore_permissions=True,
+		):
+			voucher_details[(voucher_type, row.name)] = {
+				key: row.get(field) for key, field in available.items()
+			}
+
+	remarks_by_gl_entry: dict[str, str] = {}
+	if gl_entry_names:
+		for row in frappe.get_all(
+			"GL Entry", filters={"name": ("in", list(gl_entry_names))}, fields=["name", "remarks"]
+		):
+			if row.remarks:
+				remarks_by_gl_entry[row.name] = row.remarks
+
+	for e in entries:
+		detail = voucher_details.get((e.get("voucher_type"), e.get("voucher_no")), {})
+		e["cheque_no"] = detail.get("cheque_no") or ""
+		e["mode_of_payment"] = detail.get("mode_of_payment") or ""
+		e["narration"] = detail.get("payment_type") or e.get("voucher_type") or ""
+		e["remarks"] = remarks_by_gl_entry.get(e.get("gl_entry")) or ""
+
+	return entries
