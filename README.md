@@ -28,8 +28,25 @@ Data isolation ships **off**. Nothing changes until an administrator ticks
 | A1 Company selection on login | **Select Company** page | `prymage/multi_company/session.py`, `prymage/public/js/prymage.bundle.js` |
 | A2 Company access per user | *Company Access* tab on **User** | `prymage/multi_company/user_companies.py` |
 | A3 Multi-Company Settings | **Prymage Multi Company Settings** | `prymage/prymage/doctype/prymage_multi_company_settings/` |
-| A4 Company tagging | *Company Ownership* section on Customer/Supplier/Item/Price List/Contact/Address | `prymage/multi_company/tagging.py`, `prymage/custom_fields.py` |
+| A4 Company tagging | *Company Ownership* section, added to any DocType listed in the **Shareable DocTypes** table on Prymage Multi Company Settings | `prymage/multi_company/tagging.py`, `prymage/custom_fields.py` |
 | A5 Visibility rules | — | `prymage/multi_company/permissions.py` |
+
+**Adding a new shareable DocType needs no code.** Open **Prymage Multi Company
+Settings**, add a row to *Shareable DocTypes* (the DocType, and optionally
+which existing field on its form to add "Owned by Company" after — leave
+blank to add it at the end), and Save. The field is created immediately, and
+every company gets a sharing row for it, same save. `hooks.py` never changes:
+`permission_query_conditions`, `has_permission` and `before_insert` are all
+registered once under the `"*"` wildcard doctype key (Frappe dispatches
+`hooks.get(doctype, []) + hooks.get("*", [])` for all three — confirmed
+directly in `frappe/model/db_query.py` and `frappe/permissions.py`), gated by
+a single cached `is_shareable()` membership check so every other doctype in
+the system pays only one in-memory set lookup for this, not a new entry here.
+Removing a row stops that DocType from participating (its sharing rows are
+dropped) but does **not** delete the "Owned by Company" field itself — that
+would drop the column, and every value already stored in it, so it is left
+in place deliberately; retire it by hand (see `RETIRED_FIELDS` in
+`custom_fields.py`) if it should actually go.
 | A6 Audit trail | **Prymage Multi Company Audit Trail** report | `prymage/prymage/report/prymage_multi_company_audit_trail/` (built on `track_changes`, which stays on) |
 | B Subscription expiry | **Prymage Subscription Settings** | `prymage/subscription/guard.py` |
 | C Withholding tax ex-VAT | *Withholding Tax on Net of VAT* section on Payment Entry | `prymage/overrides/payment_entry.py`, `prymage/overrides/purchase_invoice.py` |

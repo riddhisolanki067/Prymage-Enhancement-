@@ -12,9 +12,12 @@
   "require_company_selection_on_login",
   "skip_selection_for_single_company",
   "allow_multiple_company_selection",
+  "shareable_doctypes_section",
+  "shareable_doctypes_help",
+  "shareable_doctypes",
   "sharing_section",
   "sharing_help",
-  "company_data_sharing"
+  "company_doctype_sharing"
  ],
  "fields": [
   {
@@ -56,6 +59,22 @@
    "label": "Allow Selecting Multiple Companies"
   },
   {
+   "fieldname": "shareable_doctypes_section",
+   "fieldtype": "Section Break",
+   "label": "Shareable DocTypes"
+  },
+  {
+   "fieldname": "shareable_doctypes_help",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted small\">Every DocType listed here gets an 'Owned by Company' field (added automatically, the moment this is saved - no developer needed) and a row per company below to decide whether it is shared. Add a DocType here to bring it into company data isolation; nothing else needs to change anywhere in the app.</p>"
+  },
+  {
+   "fieldname": "shareable_doctypes",
+   "fieldtype": "Table",
+   "label": "Shareable DocTypes",
+   "options": "Prymage Shareable Doctype"
+  },
+  {
    "depends_on": "enable_company_data_isolation",
    "fieldname": "sharing_section",
    "fieldtype": "Section Break",
@@ -67,16 +86,16 @@
    "options": "<p class=\"text-muted small\">A record is visible to the company that owns it, always. A record owned by <i>another</i> company is visible only when <b>both</b> companies tick that box &mdash; the owner has to share it out and the reader has to accept shared data. A record with <b>no</b> owner at all is always treated as shared, with every company.</p>"
   },
   {
-   "fieldname": "company_data_sharing",
+   "fieldname": "company_doctype_sharing",
    "fieldtype": "Table",
-   "label": "Company Data Sharing",
-   "options": "Prymage Company Data Sharing"
+   "label": "Company / DocType Sharing",
+   "options": "Prymage Company Doctype Sharing"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-06 10:00:00.000000",
+ "modified": "2026-11-12 02:00:00.000000",
  "modified_by": "Administrator",
  "module": "Prymage",
  "name": "Prymage Multi Company Settings",

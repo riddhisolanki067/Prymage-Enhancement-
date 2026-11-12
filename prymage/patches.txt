@@ -1,3 +1,4 @@
 [pre_model_sync]
+prymage.patches.stash_legacy_doctype_sharing
 
 [post_model_sync]

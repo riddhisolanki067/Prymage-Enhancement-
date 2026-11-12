@@ -8,6 +8,10 @@ Run by hand after pulling new code:
 import frappe
 
 from prymage.custom_fields import setup_custom_fields
+from prymage.prymage.doctype.prymage_multi_company_settings.prymage_multi_company_settings import (
+	DEFAULT_SHAREABLE_DOCTYPES,
+	LEGACY_SHARE_FIELD_TO_DOCTYPES,
+)
 from prymage.prymage.doctype.prymage_subscription_settings.prymage_subscription_settings import (
 	ADMIN_ROLE,
 )
@@ -30,8 +34,12 @@ def after_migrate():
 
 def setup():
 	create_subscription_admin_role()
-	setup_custom_fields()
+	# Order matters: setup_custom_fields() reads the shareable-doctype
+	# registry live (prymage/custom_fields.py) - it must be seeded before
+	# the first time custom fields are created, or a fresh install creates
+	# none of them at all.
 	seed_multi_company_settings()
+	setup_custom_fields()
 	seed_subscription_settings()
 	add_switch_company_to_navbar()
 	frappe.db.commit()
@@ -56,18 +64,85 @@ def create_subscription_admin_role():
 
 # ---------------------------------------------------------------------------
 def seed_multi_company_settings():
-	"""Give every company a sharing row, sharing everything.
+	"""Seed the shareable-doctype registry, migrate the old fixed-column
+	sharing table into the new per-doctype matrix once, then reconcile the
+	matrix against the current Company list.
 
 	Defaults chosen so installing the app cannot hide a record that was visible
 	the day before: the master switch is off, and even with it on every company
 	starts out sharing.
 	"""
 	doc = frappe.get_single("Prymage Multi Company Settings")
-	changed = doc.sync_companies()
+	changed = False
+
+	if not doc.shareable_doctypes:
+		for document_type, anchor in DEFAULT_SHAREABLE_DOCTYPES.items():
+			doc.append(
+				"shareable_doctypes",
+				{"document_type": document_type, "insert_after_field": anchor},
+			)
+		changed = True
+
+	if _migrate_legacy_sharing_table(doc):
+		changed = True
+
+	# Fills in anything still missing (new companies, or a site with no
+	# legacy data at all) regardless of `changed` above.
+	if doc.sync_matrix():
+		changed = True
 
 	if changed:
 		doc.save(ignore_permissions=True)
-		print(f"Prymage: company data sharing rows -> {len(doc.company_data_sharing)}")
+		print(f"Prymage: company/doctype sharing rows -> {len(doc.company_doctype_sharing)}")
+
+
+def _migrate_legacy_sharing_table(doc) -> bool:
+	"""One-time: fold the old fixed-Check-column sharing table into
+	``company_doctype_sharing`` (one row per company x doctype), so a site
+	that already had sharing configured keeps it exactly.
+
+	The old table's module files are removed in the same change that adds
+	this one - by the time this runs (``after_migrate``, well after schema
+	sync), it no longer exists to read directly. Its data was stashed into
+	cache by ``prymage/patches/stash_legacy_doctype_sharing.py``, a
+	``pre_model_sync`` patch that ran *before* schema sync dropped it - see
+	that file for why the handoff has to go through cache rather than being
+	read directly here.
+
+	Only ever adds rows that are not already there, so it is safe to run on
+	every migrate even after the stash is long gone (its own cache key has a
+	1-hour expiry) or was never there to begin with (a fresh install).
+	"""
+	import json
+
+	from prymage.patches.stash_legacy_doctype_sharing import STASH_CACHE_KEY
+
+	stashed = frappe.cache.get_value(STASH_CACHE_KEY)
+	if not stashed:
+		return False
+
+	legacy_rows = json.loads(stashed)
+	existing_pairs = {(row.company, row.document_type) for row in doc.company_doctype_sharing}
+	changed = False
+
+	for legacy_row in legacy_rows:
+		for share_field, doctypes in LEGACY_SHARE_FIELD_TO_DOCTYPES.items():
+			is_shared = bool(legacy_row.get(share_field))
+			for document_type in doctypes:
+				pair = (legacy_row["company"], document_type)
+				if pair in existing_pairs:
+					continue
+				doc.append(
+					"company_doctype_sharing",
+					{"company": legacy_row["company"], "document_type": document_type, "is_shared": is_shared},
+				)
+				existing_pairs.add(pair)
+				changed = True
+
+	if changed:
+		frappe.cache.delete_value(STASH_CACHE_KEY)
+
+	return changed
 
 
 # ---------------------------------------------------------------------------

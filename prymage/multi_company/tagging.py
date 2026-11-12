@@ -9,8 +9,8 @@ why installing this app changes nothing on day one.
 import frappe
 
 from prymage.prymage.doctype.prymage_multi_company_settings.prymage_multi_company_settings import (
-	SHARE_FIELD_BY_DOCTYPE,
 	get_settings,
+	is_shareable,
 )
 from prymage.multi_company.session import get_primary_company
 
@@ -18,7 +18,13 @@ OWNER_FIELD = "custom_owner_company"
 
 
 def set_owner_company(doc, method=None):
-	if doc.doctype not in SHARE_FIELD_BY_DOCTYPE:
+	"""Registered under the "*" wildcard doctype key in hooks.py - runs on
+	every single insert in the whole system, not just the registry's own
+	doctypes, so ``is_shareable()`` (one cached in-memory set lookup) has to
+	be the very first thing this does, before anything that costs more than
+	that for the other 99% of doctypes it is now also called for.
+	"""
+	if not is_shareable(doc.doctype):
 		return
 
 	# A field we rely on could be missing if the install step was skipped.
@@ -52,11 +58,11 @@ def tag_existing_records(company: str, doctype: str | None = None, dry_run: int 
 	if not frappe.db.exists("Company", company):
 		frappe.throw(frappe._("Company {0} does not exist.").format(company))
 
-	doctypes = [doctype] if doctype else list(SHARE_FIELD_BY_DOCTYPE)
+	doctypes = [doctype] if doctype else sorted(get_settings().shareable_doctypes)
 	result = {}
 
 	for dt in doctypes:
-		if dt not in SHARE_FIELD_BY_DOCTYPE:
+		if not is_shareable(dt):
 			frappe.throw(frappe._("{0} is not a company-tagged master.").format(dt))
 
 		names = frappe.get_all(

@@ -4,5 +4,5 @@
 from frappe.model.document import Document
 
 
-class PrymageCompanyDataSharing(Document):
+class PrymageCompanyDoctypeSharing(Document):
 	pass

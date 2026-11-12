@@ -57,37 +57,37 @@ fixtures = [
 ]
 
 # ---------------------------------------------------------------------------
-# A5 - visibility rules for shared master data
+# A5 - visibility rules for shared master data.
+#
+# Registered under the "*" wildcard doctype key, not one entry per doctype:
+# both permission_query_conditions and has_permission dispatch
+# hooks.get(doctype, []) + hooks.get("*", []) (verified directly in
+# frappe/model/db_query.py and frappe/permissions.py), so one wildcard
+# handler runs for every doctype's queries/permission checks, and the actual
+# gate is the "Shareable DocTypes" table on Prymage Multi Company Settings -
+# a cached, in-memory membership check (is_shareable()), not this file. This
+# is the whole point: adding a DocType to that table is the only thing that
+# ever needs to happen to bring a new doctype into company data isolation -
+# nothing here changes, ever again, for any doctype.
 # ---------------------------------------------------------------------------
 permission_query_conditions = {
-	"Customer": "prymage.multi_company.permissions.customer_query_conditions",
-	"Supplier": "prymage.multi_company.permissions.supplier_query_conditions",
-	"Item": "prymage.multi_company.permissions.item_query_conditions",
-	"Price List": "prymage.multi_company.permissions.price_list_query_conditions",
-	"Contact": "prymage.multi_company.permissions.contact_query_conditions",
-	"Address": "prymage.multi_company.permissions.address_query_conditions",
+	"*": "prymage.multi_company.permissions.query_conditions",
 }
 
 has_permission = {
-	"Customer": "prymage.multi_company.permissions.has_permission",
-	"Supplier": "prymage.multi_company.permissions.has_permission",
-	"Item": "prymage.multi_company.permissions.has_permission",
-	"Price List": "prymage.multi_company.permissions.has_permission",
-	"Contact": "prymage.multi_company.permissions.has_permission",
-	"Address": "prymage.multi_company.permissions.has_permission",
+	"*": "prymage.multi_company.permissions.has_permission",
 	"Prymage Subscription Settings": "prymage.subscription.guard.settings_has_permission",
 }
 
 # ---------------------------------------------------------------------------
 # Document events
+#
+# "*" here too: set_owner_company() is called on every insert in the system
+# and is_shareable() (one cached set lookup, no query) is the first thing it
+# does - cheap enough to be the same "no code change needed" story as above.
 # ---------------------------------------------------------------------------
 doc_events = {
-	"Customer": {"before_insert": "prymage.multi_company.tagging.set_owner_company"},
-	"Supplier": {"before_insert": "prymage.multi_company.tagging.set_owner_company"},
-	"Item": {"before_insert": "prymage.multi_company.tagging.set_owner_company"},
-	"Price List": {"before_insert": "prymage.multi_company.tagging.set_owner_company"},
-	"Contact": {"before_insert": "prymage.multi_company.tagging.set_owner_company"},
-	"Address": {"before_insert": "prymage.multi_company.tagging.set_owner_company"},
+	"*": {"before_insert": "prymage.multi_company.tagging.set_owner_company"},
 	"Company": {
 		"on_trash": (
 			"prymage.prymage.doctype.prymage_multi_company_settings."

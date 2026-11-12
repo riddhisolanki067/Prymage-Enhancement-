@@ -11,26 +11,23 @@ the field set impossible to retire cleanly.
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
-# A4 - the master doctypes that get a company tag. ERPNext keeps these as one
-# global list; warehouses, cost centers and projects are already
-# company-specific, so they are deliberately absent.
+# A4 - which doctypes get a company tag is data, not code: the
+# "Shareable DocTypes" table on Prymage Multi Company Settings. Adding a row
+# there and saving creates the field below on that doctype immediately - see
+# setup_custom_fields() - no hooks.py entry, no migrate, no developer. The
+# default 6 (what this app originally shipped with, before that table
+# existed) are seeded once by install.py; nothing here reads that seed list
+# again afterwards.
 #
-# Every anchor here is the last field of whichever tab renders first on this
-# site's actual form - not just "some real field" (a Section Break anchored
-# to a field inside a *later* tab renders itself in that later tab, however
-# early the field appears in SHARED_MASTERS; verified directly against
-# frappe.get_meta() on this site, which is not always the same field order
-# as a vanilla ERPNext install - Customer's own former anchor, "language",
-# was found to render in "More Info" here, not the first tab, the same way
-# Supplier's former anchor "release_date" rendered inside "Connections").
-SHARED_MASTERS = {
-	"Customer": "default_price_list",
-	"Supplier": "customer_numbers",
-	"Item": "image",
-	"Price List": "currency",
-	"Contact": "company_name",
-	"Address": "address_type",
-}
+# Every anchor must be the last field of whichever tab renders *first* on
+# the actual site's form - not just "some real field" (a Section Break
+# anchored to a field inside a *later* tab renders itself in that later tab,
+# however early the field appears in the registry; verified directly
+# against frappe.get_meta() on this site, which is not always the same
+# field order as a vanilla ERPNext install - Customer's own anchor used to
+# be "language", which was found to render in "More Info" here, not the
+# first tab, the same way Supplier's former anchor "release_date" rendered
+# inside "Connections").
 
 OWNER_COMPANY_FIELD = "custom_owner_company"
 
@@ -83,11 +80,29 @@ def _owner_company_field(insert_after: str) -> list[dict]:
 	]
 
 
+def get_shareable_doctypes() -> list[dict]:
+	"""Live read of the registry: ``[{"document_type": ..., "insert_after_field": ...}, ...]``.
+
+	Empty, not an error, before the first migrate has ever run on a fresh
+	site (the table does not exist yet) - ``setup()`` seeds the registry
+	before calling ``setup_custom_fields()`` for exactly this reason, but
+	nothing here should assume that ordering happened.
+	"""
+	if not frappe.db.table_exists("Prymage Shareable Doctype"):
+		return []
+	return frappe.get_all(
+		"Prymage Shareable Doctype",
+		filters={"parenttype": "Prymage Multi Company Settings"},
+		fields=["document_type", "insert_after_field"],
+	)
+
+
 def get_custom_fields() -> dict:
 	fields: dict[str, list[dict]] = {}
 
-	for doctype, anchor in SHARED_MASTERS.items():
-		fields[doctype] = _owner_company_field(anchor)
+	for row in get_shareable_doctypes():
+		if row.document_type:
+			fields[row.document_type] = _owner_company_field(row.insert_after_field or "")
 
 	# ------------------------------------------------------------------
 	# A2 - company access per user. Mirrors the User Permission records on
@@ -190,11 +205,11 @@ def _reposition_owner_company_fields():
 	onto an *existing* Custom Field, but that alone does not move it - the
 	field's rendered position is driven by ``idx``, which Frappe only derives
 	from ``insert_after`` the moment a field is first created. Changing
-	``insert_after`` on a field that already exists (exactly the case here,
-	the first time an anchor in ``SHARED_MASTERS`` changes on a site that
-	already has these fields) leaves it sitting wherever its *old* anchor put
-	it - confirmed directly against this site's own DB after the Customer/
-	Supplier anchor fix below, not assumed.
+	``insert_after`` on a field that already exists (exactly the case the
+	first time an entry's ``insert_after_field`` changes in the registry on a
+	site that already has this field) leaves it sitting wherever its *old*
+	anchor put it - confirmed directly against this site's own DB after the
+	Customer/Supplier anchor fix, not assumed.
 
 	The sanctioned way to actually move an existing field, without the data
 	loss risk of deleting and recreating the Custom Field (which drops the
@@ -204,7 +219,12 @@ def _reposition_owner_company_fields():
 	``frappe/custom/doctype/customize_form/customize_form.py``, which sets
 	``idx`` from list position on save.
 	"""
-	for doctype, anchor in SHARED_MASTERS.items():
+	for row in get_shareable_doctypes():
+		doctype, anchor = row.document_type, row.insert_after_field
+		if not doctype or not anchor:
+			# Blank anchor means "append at the end" - nothing to reposition.
+			continue
+
 		meta = frappe.get_meta(doctype)
 		fieldnames = [f.fieldname for f in meta.fields]
 		if anchor not in fieldnames or "custom_prymage_company_section" not in fieldnames:

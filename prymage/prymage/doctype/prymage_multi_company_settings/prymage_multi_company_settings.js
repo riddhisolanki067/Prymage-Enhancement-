@@ -3,23 +3,23 @@
 
 frappe.ui.form.on("Prymage Multi Company Settings", {
 	refresh(frm) {
-		frm.add_custom_button(__("Sync Companies"), () => {
+		frm.add_custom_button(__("Sync Companies & DocTypes"), () => {
 			frappe
 				.call({
 					method:
-						"prymage.prymage.doctype.prymage_multi_company_settings.prymage_multi_company_settings.sync_companies",
+						"prymage.prymage.doctype.prymage_multi_company_settings.prymage_multi_company_settings.sync_matrix",
 					freeze: true,
-					freeze_message: __("Syncing companies..."),
+					freeze_message: __("Syncing..."),
 				})
 				.then((r) => {
 					if (r.message && r.message.added) {
 						frm.reload_doc();
 						frappe.show_alert({
-							message: __("Missing companies added, sharing everything by default."),
+							message: __("Missing rows added, sharing everything by default."),
 							indicator: "green",
 						});
 					} else {
-						frappe.show_alert({ message: __("Every company already has a row."), indicator: "blue" });
+						frappe.show_alert({ message: __("Every company/DocType pair already has a row."), indicator: "blue" });
 					}
 				});
 		});

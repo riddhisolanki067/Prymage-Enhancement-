@@ -32,8 +32,8 @@ are already filtered by company.
 import frappe
 
 from prymage.prymage.doctype.prymage_multi_company_settings.prymage_multi_company_settings import (
-	SHARE_FIELD_BY_DOCTYPE,
 	get_settings,
+	is_shareable,
 	shares,
 )
 from prymage.multi_company.session import get_allowed_companies, get_selected_companies
@@ -94,7 +94,7 @@ def build_conditions(doctype: str, user: str | None = None) -> str:
 	"""
 	user = user or frappe.session.user
 
-	if doctype not in SHARE_FIELD_BY_DOCTYPE:
+	if not is_shareable(doctype):
 		return ""
 
 	settings = get_settings()
@@ -121,7 +121,7 @@ def has_permission(doc, ptype=None, user=None, debug=False):
 	user = user or frappe.session.user
 
 	doctype = getattr(doc, "doctype", None)
-	if doctype not in SHARE_FIELD_BY_DOCTYPE:
+	if not doctype or not is_shareable(doctype):
 		return True
 
 	settings = get_settings()
@@ -137,29 +137,13 @@ def has_permission(doc, ptype=None, user=None, debug=False):
 
 
 # ---------------------------------------------------------------------------
-# One thin wrapper per doctype: the hook passes `user` positionally and the
-# doctype as a keyword, so a single shared function would lose the doctype on
-# the `has_permission` side. Keeping them explicit also makes hooks.py readable.
+# Registered once, under the "*" wildcard doctype key in hooks.py -
+# frappe/model/db_query.py's get_permission_query_conditions() calls
+# hooks.get(self.doctype, []) + hooks.get("*", []), so this runs for every
+# doctype's query, not just the 6 originally hardcoded here. is_shareable()
+# above is the cheap, cached early-exit that keeps that harmless for the
+# other 99% of doctypes it is now also called for: a single in-memory set
+# lookup, no query, for anything not in the registry.
 # ---------------------------------------------------------------------------
-def customer_query_conditions(user=None, doctype="Customer"):
-	return build_conditions("Customer", user)
-
-
-def supplier_query_conditions(user=None, doctype="Supplier"):
-	return build_conditions("Supplier", user)
-
-
-def item_query_conditions(user=None, doctype="Item"):
-	return build_conditions("Item", user)
-
-
-def price_list_query_conditions(user=None, doctype="Price List"):
-	return build_conditions("Price List", user)
-
-
-def contact_query_conditions(user=None, doctype="Contact"):
-	return build_conditions("Contact", user)
-
-
-def address_query_conditions(user=None, doctype="Address"):
-	return build_conditions("Address", user)
+def query_conditions(user=None, doctype=None):
+	return build_conditions(doctype, user)
